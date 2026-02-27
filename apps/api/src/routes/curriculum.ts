@@ -2,6 +2,7 @@ import { Role } from '@prisma/client';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
+import { sendApiError } from '../lib/apiError.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireRole } from '../plugins/authGuard.js';
 
@@ -35,7 +36,7 @@ const CreateQuestionCurriculumTagBodySchema = z.object({
 
 function getRequestAuth(request: FastifyRequest, reply: FastifyReply) {
   if (!request.auth) {
-    void reply.status(401).send({ message: 'Unauthorized' });
+    void sendApiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
     return null;
   }
 

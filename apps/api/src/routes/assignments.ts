@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
+import { sendApiError, zodDetails } from '../lib/apiError.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../plugins/authGuard.js';
 
@@ -11,12 +12,18 @@ const AssignmentParamsSchema = z.object({
 export async function registerAssignmentRoutes(app: FastifyInstance) {
   app.get('/assignments/:id', { preHandler: [requireAuth] }, async (request, reply) => {
     if (!request.auth) {
-      return reply.status(401).send({ message: 'Unauthorized' });
+      return sendApiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
     }
 
     const parsedParams = AssignmentParamsSchema.safeParse(request.params);
     if (!parsedParams.success) {
-      return reply.status(400).send({ message: parsedParams.error.message });
+      return sendApiError(
+        reply,
+        400,
+        'VALIDATION_ERROR',
+        'Invalid assignment id',
+        zodDetails(parsedParams.error),
+      );
     }
 
     const assignment = await prisma.assignment.findFirst({
@@ -89,7 +96,7 @@ export async function registerAssignmentRoutes(app: FastifyInstance) {
     });
 
     if (!assignment) {
-      return reply.status(404).send({ message: 'Assignment not found' });
+      return sendApiError(reply, 404, 'ASSIGNMENT_NOT_FOUND', 'Assignment not found');
     }
 
     return reply.send(assignment);
