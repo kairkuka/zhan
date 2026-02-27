@@ -18,6 +18,10 @@ This repository contains the Stage 1 Block 0 scaffold for a TypeScript monorepo 
    cp apps/api/.env.example apps/api/.env
    cp apps/web/.env.example apps/web/.env.local
    ```
+   Set API auth values in `.env`:
+   - `JWT_SECRET` (required, at least 16 chars)
+   - `TOKEN_EXPIRES_IN` (default `7d`)
+   - `BOOTSTRAP_ADMIN_KEY` (required for temporary `/auth/register`)
 3. Start Postgres for local development:
    ```bash
    docker compose up -d

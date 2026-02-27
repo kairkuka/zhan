@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import { HealthResponseSchema, type HealthResponse } from '@skyvern/shared';
@@ -56,10 +57,13 @@ export default function HomePage() {
 
   return (
     <main className="container">
-      <h1>Skyvern Stage 1 - Block 0</h1>
+      <h1>Skyvern Stage 1 - Block 2</h1>
       <p>Web app is running.</p>
       <p>
         API target: <code>{apiBaseUrl}</code>
+      </p>
+      <p>
+        <Link href="/login">Go to login</Link> | <Link href="/admin/users">View admin users</Link>
       </p>
 
       {health.status === 'loading' && <p>{health.message}</p>}

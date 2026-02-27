@@ -1,7 +1,8 @@
 import { buildServer } from './server.js';
+import { env } from './lib/env.js';
 
-const host = process.env.API_HOST ?? '0.0.0.0';
-const port = Number(process.env.API_PORT ?? 4000);
+const host = env.API_HOST;
+const port = env.API_PORT;
 
 async function start() {
   const app = await buildServer();

@@ -1,6 +1,8 @@
 import { PrismaClient, Role } from '@prisma/client';
+import argon2 from 'argon2';
 
 const prisma = new PrismaClient();
+const DEMO_PASSWORD = 'demo12345';
 
 async function clearDemoData() {
   await prisma.attemptAnswer.deleteMany();
@@ -29,6 +31,14 @@ async function clearDemoData() {
 async function main() {
   await clearDemoData();
 
+  const [adminPasswordHash, teacherPasswordHash, parentPasswordHash, studentPasswordHash] =
+    await Promise.all([
+      argon2.hash(DEMO_PASSWORD),
+      argon2.hash(DEMO_PASSWORD),
+      argon2.hash(DEMO_PASSWORD),
+      argon2.hash(DEMO_PASSWORD),
+    ]);
+
   const organization = await prisma.organization.create({
     data: {
       name: 'Demo Academy',
@@ -38,7 +48,7 @@ async function main() {
   const adminUser = await prisma.user.create({
     data: {
       email: 'admin@demo.local',
-      passwordHash: 'demo_hash_admin',
+      passwordHash: adminPasswordHash,
       role: Role.ADMIN,
       organizationId: organization.id,
     },
@@ -47,7 +57,7 @@ async function main() {
   const teacherUser = await prisma.user.create({
     data: {
       email: 'teacher@demo.local',
-      passwordHash: 'demo_hash_teacher',
+      passwordHash: teacherPasswordHash,
       role: Role.TEACHER,
       organizationId: organization.id,
     },
@@ -56,7 +66,7 @@ async function main() {
   const parentUser = await prisma.user.create({
     data: {
       email: 'parent@demo.local',
-      passwordHash: 'demo_hash_parent',
+      passwordHash: parentPasswordHash,
       role: Role.PARENT,
       organizationId: organization.id,
     },
@@ -65,7 +75,7 @@ async function main() {
   const studentUser = await prisma.user.create({
     data: {
       email: 'student@demo.local',
-      passwordHash: 'demo_hash_student',
+      passwordHash: studentPasswordHash,
       role: Role.STUDENT,
       organizationId: organization.id,
     },
@@ -132,6 +142,11 @@ async function main() {
       2,
     ),
   );
+  console.log('Demo login credentials:');
+  console.log(`admin@demo.local / ${DEMO_PASSWORD}`);
+  console.log(`teacher@demo.local / ${DEMO_PASSWORD}`);
+  console.log(`parent@demo.local / ${DEMO_PASSWORD}`);
+  console.log(`student@demo.local / ${DEMO_PASSWORD}`);
 }
 
 main()
