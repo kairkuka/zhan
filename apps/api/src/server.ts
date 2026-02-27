@@ -4,9 +4,11 @@ import Fastify from 'fastify';
 import { HealthResponseSchema, type HealthResponse } from '@skyvern/shared';
 import { env } from './lib/env.js';
 import { registerAdminRoutes } from './routes/admin.js';
+import { registerAssignmentRoutes } from './routes/assignments.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerCurriculumRoutes } from './routes/curriculum.js';
 import { registerMeRoutes } from './routes/me.js';
+import { registerQuestionRoutes } from './routes/questions.js';
 import { registerJwt } from './plugins/jwt.js';
 
 export async function buildServer() {
@@ -29,6 +31,8 @@ export async function buildServer() {
   await registerAuthRoutes(app);
   await registerMeRoutes(app);
   await registerAdminRoutes(app);
+  await registerAssignmentRoutes(app);
+  await registerQuestionRoutes(app);
   await registerCurriculumRoutes(app);
 
   return app;
