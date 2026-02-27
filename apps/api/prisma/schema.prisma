@@ -321,6 +321,7 @@ model QuestionSkillTag {
   organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([questionId, skillId])
+  @@unique([questionId, curriculumSkillId])
   @@index([organizationId])
   @@index([questionId])
   @@index([skillId])

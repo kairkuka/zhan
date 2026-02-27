@@ -330,26 +330,22 @@ export async function registerCurriculumRoutes(app: FastifyInstance) {
         return reply.status(400).send({ message: 'Invalid curriculum skill relation' });
       }
 
-      const existingTag = await prisma.questionSkillTag.findFirst({
+      const tag = await prisma.questionSkillTag.upsert({
         where: {
-          questionId: question.id,
-          curriculumSkillId: curriculumSkill.id,
+          questionId_curriculumSkillId: {
+            questionId: question.id,
+            curriculumSkillId: curriculumSkill.id,
+          },
         },
-      });
-
-      if (existingTag) {
-        return reply.status(200).send(existingTag);
-      }
-
-      const createdTag = await prisma.questionSkillTag.create({
-        data: {
+        update: {},
+        create: {
           questionId: question.id,
           curriculumSkillId: curriculumSkill.id,
           organizationId: auth.organizationId,
         },
       });
 
-      return reply.status(201).send(createdTag);
+      return reply.status(200).send(tag);
     },
   );
 }
