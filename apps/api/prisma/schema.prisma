@@ -25,6 +25,7 @@ model Organization {
   name               String
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
+  subjects           Subject[]
   users              User[]
   students           Student[]
   parents            Parent[]
@@ -47,45 +48,69 @@ model Organization {
   eventLogs          EventLog[]
 }
 
+model Subject {
+  id             String       @id @default(cuid())
+  name           String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  units          Unit[]
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+}
+
+model Unit {
+  id        String            @id @default(cuid())
+  name      String
+  subjectId String
+  subject   Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topics    CurriculumTopic[]
+  order     Int
+  createdAt DateTime          @default(now())
+
+  @@index([subjectId])
+  @@index([subjectId, order])
+}
+
 model User {
-  id               String       @id @default(cuid())
-  email            String       @unique
-  passwordHash     String
-  role             Role
-  organizationId   String
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
-  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  student          Student?
-  parent           Parent?
-  teacher          Teacher?
-  assignmentsMade  Assignment[] @relation("AssignmentsCreatedByUser")
+  id              String       @id @default(cuid())
+  email           String       @unique
+  passwordHash    String
+  role            Role
+  organizationId  String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  student         Student?
+  parent          Parent?
+  teacher         Teacher?
+  assignmentsMade Assignment[] @relation("AssignmentsCreatedByUser")
 
   @@index([organizationId])
 }
 
 model Student {
-  id              String             @id @default(cuid())
-  userId          String             @unique
-  organizationId  String
-  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parentLinks     ParentStudentLink[]
-  classEnrollments ClassEnrollment[]
+  id                 String              @id @default(cuid())
+  userId             String              @unique
+  organizationId     String
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parentLinks        ParentStudentLink[]
+  classEnrollments   ClassEnrollment[]
   assignmentReleases AssignmentRelease[]
-  attempts        Attempt[]
-  masterySnapshots MasterySnapshot[]
+  attempts           Attempt[]
+  masterySnapshots   MasterySnapshot[]
 
   @@index([organizationId])
 }
 
 model Parent {
-  id              String             @id @default(cuid())
-  userId          String             @unique
-  organizationId  String
-  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  studentLinks    ParentStudentLink[]
+  id             String              @id @default(cuid())
+  userId         String              @unique
+  organizationId String
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  studentLinks   ParentStudentLink[]
 
   @@index([organizationId])
 }
@@ -180,17 +205,40 @@ model Topic {
 }
 
 model Skill {
-  id              String             @id @default(cuid())
-  name            String
-  topicId         String
-  organizationId  String
-  topic           Topic              @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  objectives      Objective[]
-  questionTags    QuestionSkillTag[]
+  id               String             @id @default(cuid())
+  name             String
+  topicId          String
+  organizationId   String
+  topic            Topic              @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  objectives       Objective[]
+  questionTags     QuestionSkillTag[]
   masterySnapshots MasterySnapshot[]
 
   @@index([organizationId])
+  @@index([topicId])
+}
+
+model CurriculumTopic {
+  id        String            @id @default(cuid())
+  name      String
+  unitId    String
+  unit      Unit              @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  skills    CurriculumSkill[]
+  order     Int
+  createdAt DateTime          @default(now())
+
+  @@index([unitId])
+  @@index([unitId, order])
+}
+
+model CurriculumSkill {
+  id        String          @id @default(cuid())
+  name      String
+  topicId   String
+  topic     CurriculumTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  createdAt DateTime        @default(now())
+
   @@index([topicId])
 }
 
@@ -245,14 +293,14 @@ model AssignmentRelease {
 }
 
 model Question {
-  id             String            @id @default(cuid())
+  id             String             @id @default(cuid())
   assignmentId   String
   type           QuestionType
   prompt         String
-  correctAnswer  String            @db.Text
+  correctAnswer  String             @db.Text
   organizationId String
-  assignment     Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignment     Assignment         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   skillTags      QuestionSkillTag[]
   attemptAnswers AttemptAnswer[]
 
@@ -276,16 +324,16 @@ model QuestionSkillTag {
 }
 
 model Attempt {
-  id                  String          @id @default(cuid())
+  id                  String            @id @default(cuid())
   assignmentReleaseId String
   studentId           String
-  startedAt           DateTime         @default(now())
+  startedAt           DateTime          @default(now())
   submittedAt         DateTime?
   score               Int?
   organizationId      String
   assignmentRelease   AssignmentRelease @relation(fields: [assignmentReleaseId], references: [id], onDelete: Cascade)
-  student             Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  organization        Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  student             Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  organization        Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   answers             AttemptAnswer[]
 
   @@index([organizationId])
