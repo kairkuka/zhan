@@ -39,7 +39,7 @@ importers:
         specifier: ^11.0.1
         version: 11.2.0
       '@prisma/client':
-        specifier: ^6.19.2
+        specifier: 6.19.2
         version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
       '@skyvern/shared':
         specifier: workspace:*
@@ -55,7 +55,7 @@ importers:
         specifier: ^11.0.0
         version: 11.0.0
       prisma:
-        specifier: ^6.19.2
+        specifier: 6.19.2
         version: 6.19.2(typescript@5.9.3)
       tsx:
         specifier: ^4.19.1

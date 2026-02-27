@@ -27,6 +27,16 @@ This repository contains the Stage 1 Block 0 scaffold for a TypeScript monorepo 
    pnpm dev
    ```
 
+If Docker is unavailable, you can run PostgreSQL via Homebrew:
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+```
+To stop it later:
+```bash
+brew services stop postgresql@16
+```
+
 ## Database (Prisma)
 1. Run migrations:
    ```bash
