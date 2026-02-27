@@ -1,16 +1,20 @@
-import { PrismaClient, Role } from '@prisma/client';
+import { PrismaClient, QuestionType, Role } from '@prisma/client';
 import argon2 from 'argon2';
 
 const prisma = new PrismaClient();
 const DEMO_PASSWORD = 'demo12345';
 
 async function clearDemoData() {
+  await prisma.questionSkillTag.deleteMany();
   await prisma.attemptAnswer.deleteMany();
   await prisma.attempt.deleteMany();
-  await prisma.questionSkillTag.deleteMany();
   await prisma.question.deleteMany();
   await prisma.assignmentRelease.deleteMany();
   await prisma.assignment.deleteMany();
+  await prisma.curriculumSkill.deleteMany();
+  await prisma.curriculumTopic.deleteMany();
+  await prisma.unit.deleteMany();
+  await prisma.subject.deleteMany();
   await prisma.objective.deleteMany();
   await prisma.skill.deleteMany();
   await prisma.topic.deleteMany();
@@ -125,6 +129,94 @@ async function main() {
     },
   });
 
+  const subject = await prisma.subject.create({
+    data: {
+      name: 'Mathematics 5',
+      organizationId: organization.id,
+    },
+  });
+
+  const fractionsUnit = await prisma.unit.create({
+    data: {
+      name: 'Fractions',
+      subjectId: subject.id,
+      order: 1,
+    },
+  });
+
+  const decimalsUnit = await prisma.unit.create({
+    data: {
+      name: 'Decimals',
+      subjectId: subject.id,
+      order: 2,
+    },
+  });
+
+  const addingFractionsTopic = await prisma.curriculumTopic.create({
+    data: {
+      name: 'Adding Fractions',
+      unitId: fractionsUnit.id,
+      order: 1,
+    },
+  });
+
+  const comparingDecimalsTopic = await prisma.curriculumTopic.create({
+    data: {
+      name: 'Comparing Decimals',
+      unitId: decimalsUnit.id,
+      order: 1,
+    },
+  });
+
+  const denominatorSkill = await prisma.curriculumSkill.create({
+    data: {
+      name: 'Find common denominator',
+      topicId: addingFractionsTopic.id,
+    },
+  });
+
+  const decimalOrderSkill = await prisma.curriculumSkill.create({
+    data: {
+      name: 'Compare decimal values',
+      topicId: comparingDecimalsTopic.id,
+    },
+  });
+
+  const demoCourse = await prisma.course.create({
+    data: {
+      grade: '5',
+      subject: 'Mathematics',
+      organizationId: organization.id,
+    },
+  });
+
+  const demoAssignment = await prisma.assignment.create({
+    data: {
+      title: 'Diagnostic Quiz 1',
+      courseId: demoCourse.id,
+      organizationId: organization.id,
+      createdBy: adminUser.id,
+    },
+  });
+
+  const demoQuestion = await prisma.question.create({
+    data: {
+      assignmentId: demoAssignment.id,
+      type: QuestionType.MCQ,
+      prompt: 'What is 1/2 + 1/4?',
+      correctAnswer: '3/4',
+      organizationId: organization.id,
+    },
+  });
+
+  const initialQuestionCurriculumTag = await prisma.questionSkillTag.create({
+    data: {
+      questionId: demoQuestion.id,
+      curriculumSkillId: denominatorSkill.id,
+      organizationId: organization.id,
+    },
+  });
+
   console.log('Seed complete. Demo data created:');
   console.log(
     JSON.stringify(
@@ -137,6 +229,27 @@ async function main() {
           student: { id: studentUser.id, email: studentUser.email, studentId: student.id },
         },
         classGroup: { id: classGroup.id, name: classGroup.name },
+        curriculum: {
+          subject: { id: subject.id, name: subject.name },
+          units: [
+            { id: fractionsUnit.id, name: fractionsUnit.name },
+            { id: decimalsUnit.id, name: decimalsUnit.name },
+          ],
+          topics: [
+            { id: addingFractionsTopic.id, name: addingFractionsTopic.name },
+            { id: comparingDecimalsTopic.id, name: comparingDecimalsTopic.name },
+          ],
+          skills: [
+            { id: denominatorSkill.id, name: denominatorSkill.name },
+            { id: decimalOrderSkill.id, name: decimalOrderSkill.name },
+          ],
+        },
+        question: {
+          id: demoQuestion.id,
+          assignmentId: demoAssignment.id,
+          initialCurriculumTagId: initialQuestionCurriculumTag.id,
+          curriculumSkillId: denominatorSkill.id,
+        },
       },
       null,
       2,

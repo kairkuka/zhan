@@ -25,6 +25,14 @@ const CreateSkillBodySchema = z.object({
   topicId: z.string().cuid(),
 });
 
+const CreateQuestionCurriculumTagParamsSchema = z.object({
+  id: z.string().cuid(),
+});
+
+const CreateQuestionCurriculumTagBodySchema = z.object({
+  curriculumSkillId: z.string().cuid(),
+});
+
 function getRequestAuth(request: FastifyRequest, reply: FastifyReply) {
   if (!request.auth) {
     void reply.status(401).send({ message: 'Unauthorized' });
@@ -223,4 +231,125 @@ export async function registerCurriculumRoutes(app: FastifyInstance) {
 
     return reply.send({ subjects });
   });
+
+  app.get('/curriculum/skills', { preHandler: [requireAuth] }, async (request, reply) => {
+    const auth = getRequestAuth(request, reply);
+    if (!auth) {
+      return;
+    }
+
+    const skills = await prisma.curriculumSkill.findMany({
+      where: {
+        topic: {
+          unit: {
+            subject: {
+              organizationId: auth.organizationId,
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+      select: {
+        id: true,
+        name: true,
+        topicId: true,
+        topic: {
+          select: {
+            id: true,
+            name: true,
+            unitId: true,
+            unit: {
+              select: {
+                id: true,
+                name: true,
+                subjectId: true,
+                subject: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return reply.send({ skills });
+  });
+
+  app.post(
+    '/questions/:id/curriculum-skill-tags',
+    { preHandler: [requireAuth, requireRole([Role.ADMIN])] },
+    async (request, reply) => {
+      const auth = getRequestAuth(request, reply);
+      if (!auth) {
+        return;
+      }
+
+      const parsedParams = CreateQuestionCurriculumTagParamsSchema.safeParse(request.params);
+      if (!parsedParams.success) {
+        return reply.status(400).send({ message: parsedParams.error.message });
+      }
+
+      const parsedBody = CreateQuestionCurriculumTagBodySchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        return reply.status(400).send({ message: parsedBody.error.message });
+      }
+
+      const question = await prisma.question.findFirst({
+        where: {
+          id: parsedParams.data.id,
+          organizationId: auth.organizationId,
+        },
+        select: { id: true },
+      });
+
+      if (!question) {
+        return reply.status(400).send({ message: 'Invalid question relation' });
+      }
+
+      const curriculumSkill = await prisma.curriculumSkill.findFirst({
+        where: {
+          id: parsedBody.data.curriculumSkillId,
+          topic: {
+            unit: {
+              subject: {
+                organizationId: auth.organizationId,
+              },
+            },
+          },
+        },
+        select: { id: true },
+      });
+
+      if (!curriculumSkill) {
+        return reply.status(400).send({ message: 'Invalid curriculum skill relation' });
+      }
+
+      const existingTag = await prisma.questionSkillTag.findFirst({
+        where: {
+          questionId: question.id,
+          curriculumSkillId: curriculumSkill.id,
+        },
+      });
+
+      if (existingTag) {
+        return reply.status(200).send(existingTag);
+      }
+
+      const createdTag = await prisma.questionSkillTag.create({
+        data: {
+          questionId: question.id,
+          curriculumSkillId: curriculumSkill.id,
+          organizationId: auth.organizationId,
+        },
+      });
+
+      return reply.status(201).send(createdTag);
+    },
+  );
 }

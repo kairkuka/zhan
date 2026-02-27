@@ -233,11 +233,12 @@ model CurriculumTopic {
 }
 
 model CurriculumSkill {
-  id        String          @id @default(cuid())
-  name      String
-  topicId   String
-  topic     CurriculumTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  createdAt DateTime        @default(now())
+  id           String            @id @default(cuid())
+  name         String
+  topicId      String
+  topic        CurriculumTopic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  questionTags QuestionSkillTag[]
+  createdAt    DateTime          @default(now())
 
   @@index([topicId])
 }
@@ -309,18 +310,21 @@ model Question {
 }
 
 model QuestionSkillTag {
-  id             String       @id @default(cuid())
-  questionId     String
-  skillId        String
-  organizationId String
-  question       Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  skill          Skill        @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                String           @id @default(cuid())
+  questionId        String
+  skillId           String?
+  curriculumSkillId String?
+  organizationId    String
+  question          Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  skill             Skill?           @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  curriculumSkill   CurriculumSkill? @relation(fields: [curriculumSkillId], references: [id], onDelete: SetNull)
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([questionId, skillId])
   @@index([organizationId])
   @@index([questionId])
   @@index([skillId])
+  @@index([curriculumSkillId])
 }
 
 model Attempt {
