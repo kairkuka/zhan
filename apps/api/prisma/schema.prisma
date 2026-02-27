@@ -1,0 +1,341 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  PARENT
+  STUDENT
+}
+
+enum QuestionType {
+  MCQ
+  NUMERIC
+  SHORT_TEXT
+}
+
+model Organization {
+  id                 String              @id @default(cuid())
+  name               String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  users              User[]
+  students           Student[]
+  parents            Parent[]
+  teachers           Teacher[]
+  parentStudentLinks ParentStudentLink[]
+  classGroups        ClassGroup[]
+  classEnrollments   ClassEnrollment[]
+  courses            Course[]
+  modules            Module[]
+  topics             Topic[]
+  skills             Skill[]
+  objectives         Objective[]
+  assignments        Assignment[]
+  assignmentReleases AssignmentRelease[]
+  questions          Question[]
+  questionSkillTags  QuestionSkillTag[]
+  attempts           Attempt[]
+  attemptAnswers     AttemptAnswer[]
+  masterySnapshots   MasterySnapshot[]
+  eventLogs          EventLog[]
+}
+
+model User {
+  id               String       @id @default(cuid())
+  email            String       @unique
+  passwordHash     String
+  role             Role
+  organizationId   String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  student          Student?
+  parent           Parent?
+  teacher          Teacher?
+  assignmentsMade  Assignment[] @relation("AssignmentsCreatedByUser")
+
+  @@index([organizationId])
+}
+
+model Student {
+  id              String             @id @default(cuid())
+  userId          String             @unique
+  organizationId  String
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parentLinks     ParentStudentLink[]
+  classEnrollments ClassEnrollment[]
+  assignmentReleases AssignmentRelease[]
+  attempts        Attempt[]
+  masterySnapshots MasterySnapshot[]
+
+  @@index([organizationId])
+}
+
+model Parent {
+  id              String             @id @default(cuid())
+  userId          String             @unique
+  organizationId  String
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  studentLinks    ParentStudentLink[]
+
+  @@index([organizationId])
+}
+
+model Teacher {
+  id             String       @id @default(cuid())
+  userId         String       @unique
+  organizationId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model ParentStudentLink {
+  id             String       @id @default(cuid())
+  parentId       String
+  studentId      String
+  organizationId String
+  parent         Parent       @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([parentId, studentId])
+  @@index([organizationId])
+  @@index([parentId])
+  @@index([studentId])
+}
+
+model ClassGroup {
+  id             String              @id @default(cuid())
+  name           String
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enrollments    ClassEnrollment[]
+  releases       AssignmentRelease[]
+
+  @@index([organizationId])
+}
+
+model ClassEnrollment {
+  id             String       @id @default(cuid())
+  classGroupId   String
+  studentId      String
+  organizationId String
+  classGroup     ClassGroup   @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
+  student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([classGroupId, studentId])
+  @@index([organizationId])
+  @@index([classGroupId])
+  @@index([studentId])
+}
+
+model Course {
+  id             String       @id @default(cuid())
+  grade          String
+  subject        String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  modules        Module[]
+  assignments    Assignment[]
+
+  @@index([organizationId])
+}
+
+model Module {
+  id             String       @id @default(cuid())
+  name           String
+  courseId       String
+  organizationId String
+  course         Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  topics         Topic[]
+
+  @@index([organizationId])
+  @@index([courseId])
+}
+
+model Topic {
+  id             String       @id @default(cuid())
+  name           String
+  moduleId       String
+  organizationId String
+  module         Module       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  skills         Skill[]
+
+  @@index([organizationId])
+  @@index([moduleId])
+}
+
+model Skill {
+  id              String             @id @default(cuid())
+  name            String
+  topicId         String
+  organizationId  String
+  topic           Topic              @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  objectives      Objective[]
+  questionTags    QuestionSkillTag[]
+  masterySnapshots MasterySnapshot[]
+
+  @@index([organizationId])
+  @@index([topicId])
+}
+
+model Objective {
+  id             String       @id @default(cuid())
+  description    String
+  skillId        String
+  organizationId String
+  skill          Skill        @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([skillId])
+}
+
+model Assignment {
+  id             String              @id @default(cuid())
+  title          String
+  courseId       String
+  organizationId String
+  lockedAt       DateTime?
+  createdBy      String
+  course         Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creator        User                @relation("AssignmentsCreatedByUser", fields: [createdBy], references: [id], onDelete: Restrict)
+  releases       AssignmentRelease[]
+  questions      Question[]
+
+  @@index([organizationId])
+  @@index([courseId])
+  @@index([createdBy])
+}
+
+model AssignmentRelease {
+  id             String       @id @default(cuid())
+  assignmentId   String
+  classGroupId   String?
+  studentId      String?
+  releasedAt     DateTime     @default(now())
+  dueDate        DateTime?
+  organizationId String
+  assignment     Assignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  classGroup     ClassGroup?  @relation(fields: [classGroupId], references: [id], onDelete: SetNull)
+  student        Student?     @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  attempts       Attempt[]
+
+  @@index([organizationId])
+  @@index([assignmentId])
+  @@index([classGroupId])
+  @@index([studentId])
+}
+
+model Question {
+  id             String            @id @default(cuid())
+  assignmentId   String
+  type           QuestionType
+  prompt         String
+  correctAnswer  String            @db.Text
+  organizationId String
+  assignment     Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  skillTags      QuestionSkillTag[]
+  attemptAnswers AttemptAnswer[]
+
+  @@index([organizationId])
+  @@index([assignmentId])
+}
+
+model QuestionSkillTag {
+  id             String       @id @default(cuid())
+  questionId     String
+  skillId        String
+  organizationId String
+  question       Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  skill          Skill        @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, skillId])
+  @@index([organizationId])
+  @@index([questionId])
+  @@index([skillId])
+}
+
+model Attempt {
+  id                  String          @id @default(cuid())
+  assignmentReleaseId String
+  studentId           String
+  startedAt           DateTime         @default(now())
+  submittedAt         DateTime?
+  score               Int?
+  organizationId      String
+  assignmentRelease   AssignmentRelease @relation(fields: [assignmentReleaseId], references: [id], onDelete: Cascade)
+  student             Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  organization        Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  answers             AttemptAnswer[]
+
+  @@index([organizationId])
+  @@index([assignmentReleaseId])
+  @@index([studentId])
+}
+
+model AttemptAnswer {
+  id             String       @id @default(cuid())
+  attemptId      String
+  questionId     String
+  answer         String       @db.Text
+  isCorrect      Boolean
+  organizationId String
+  attempt        Attempt      @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question       Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@index([organizationId])
+  @@index([attemptId])
+  @@index([questionId])
+}
+
+model MasterySnapshot {
+  id             String       @id @default(cuid())
+  studentId      String
+  skillId        String
+  mastery        Int
+  confidence     Int
+  updatedAt      DateTime     @default(now()) @updatedAt
+  organizationId String
+  student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  skill          Skill        @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, skillId])
+  @@index([organizationId])
+  @@index([studentId])
+  @@index([skillId])
+}
+
+model EventLog {
+  id             String       @id @default(cuid())
+  type           String
+  payload        Json
+  organizationId String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, createdAt])
+}

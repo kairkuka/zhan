@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE "AssignmentRelease" ALTER COLUMN "releasedAt" SET DEFAULT CURRENT_TIMESTAMP;
+
+-- AlterTable
+ALTER TABLE "Attempt" ALTER COLUMN "startedAt" SET DEFAULT CURRENT_TIMESTAMP;
+
+-- AlterTable
+ALTER TABLE "MasterySnapshot" ALTER COLUMN "updatedAt" SET DEFAULT CURRENT_TIMESTAMP;

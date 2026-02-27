@@ -7,15 +7,25 @@
     "dev": "tsx watch src/index.ts",
     "lint": "eslint src --ext .ts",
     "test": "echo 'No tests yet'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "dotenv -e ../../.env -- prisma generate --schema prisma/schema.prisma",
+    "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev --schema prisma/schema.prisma",
+    "prisma:seed": "dotenv -e ../../.env -- prisma db seed --schema prisma/schema.prisma",
+    "prisma:studio": "dotenv -e ../../.env -- prisma studio --schema prisma/schema.prisma"
+  },
+  "prisma": {
+    "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",
+    "@prisma/client": "^6.19.2",
     "@skyvern/shared": "workspace:*",
     "fastify": "^5.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.8.7",
+    "dotenv-cli": "^11.0.0",
+    "prisma": "^6.19.2",
     "tsx": "^4.19.1"
   }
 }

@@ -27,6 +27,20 @@ This repository contains the Stage 1 Block 0 scaffold for a TypeScript monorepo 
    pnpm dev
    ```
 
+## Database (Prisma)
+1. Run migrations:
+   ```bash
+   pnpm --filter @skyvern/api prisma:migrate
+   ```
+2. Seed demo data:
+   ```bash
+   pnpm --filter @skyvern/api prisma:seed
+   ```
+3. Open Prisma Studio (optional):
+   ```bash
+   pnpm --filter @skyvern/api prisma:studio
+   ```
+
 ## Scripts
 - `pnpm dev` - Runs web and api concurrently.
 - `pnpm lint` - Lints all workspaces.
