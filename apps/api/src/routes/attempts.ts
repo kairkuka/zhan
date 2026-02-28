@@ -20,6 +20,16 @@ const SaveAnswerBodySchema = z.object({
   answer: z.any(),
 });
 
+type AttemptWithScores = {
+  questionAttempts: Array<{
+    score: number | null;
+  }>;
+};
+
+function calculateTotalScore(attempt: AttemptWithScores): number {
+  return attempt.questionAttempts.reduce((sum, item) => sum + (item.score ?? 0), 0);
+}
+
 function getRequestAuth(request: FastifyRequest, reply: FastifyReply) {
   if (!request.auth) {
     void sendApiError(reply, 401, 'UNAUTHORIZED', 'Unauthorized');
@@ -54,6 +64,210 @@ async function getStudentIdForAuth(request: FastifyRequest, reply: FastifyReply)
 }
 
 export async function registerAttemptRoutes(app: FastifyInstance) {
+  app.get(
+    '/me/attempts',
+    { preHandler: [requireAuth, requireRole([Role.STUDENT])] },
+    async (request, reply) => {
+      const auth = getRequestAuth(request, reply);
+      if (!auth) {
+        return;
+      }
+
+      const studentId = await getStudentIdForAuth(request, reply);
+      if (!studentId) {
+        return;
+      }
+
+      const attempts = await prisma.assignmentAttempt.findMany({
+        where: {
+          organizationId: auth.organizationId,
+          studentId,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        select: {
+          id: true,
+          assignmentId: true,
+          status: true,
+          createdAt: true,
+          submittedAt: true,
+          questionAttempts: {
+            select: {
+              score: true,
+            },
+          },
+        },
+      });
+
+      return reply.send({
+        attempts: attempts.map((attempt) => ({
+          attemptId: attempt.id,
+          assignmentId: attempt.assignmentId,
+          status: attempt.status,
+          createdAt: attempt.createdAt,
+          submittedAt: attempt.submittedAt,
+          totalScore: calculateTotalScore(attempt),
+        })),
+      });
+    },
+  );
+
+  app.get(
+    '/attempts/:id',
+    { preHandler: [requireAuth, requireRole([Role.STUDENT, Role.TEACHER, Role.ADMIN])] },
+    async (request, reply) => {
+      const auth = getRequestAuth(request, reply);
+      if (!auth) {
+        return;
+      }
+
+      const parsedParams = AttemptParamsSchema.safeParse(request.params);
+      if (!parsedParams.success) {
+        return sendApiError(
+          reply,
+          400,
+          'VALIDATION_ERROR',
+          'Invalid attempt id',
+          zodDetails(parsedParams.error),
+        );
+      }
+
+      const attempt = await prisma.assignmentAttempt.findFirst({
+        where: {
+          id: parsedParams.data.id,
+          organizationId: auth.organizationId,
+        },
+        select: {
+          id: true,
+          assignmentId: true,
+          studentId: true,
+          status: true,
+          createdAt: true,
+          submittedAt: true,
+          questionAttempts: {
+            orderBy: {
+              id: 'asc',
+            },
+            select: {
+              questionId: true,
+              score: true,
+              feedback: true,
+            },
+          },
+        },
+      });
+
+      if (!attempt) {
+        return sendApiError(reply, 404, 'ATTEMPT_NOT_FOUND', 'Attempt not found');
+      }
+
+      if (auth.role === Role.STUDENT) {
+        const studentId = await getStudentIdForAuth(request, reply);
+        if (!studentId) {
+          return;
+        }
+
+        if (attempt.studentId !== studentId) {
+          return sendApiError(reply, 403, 'FORBIDDEN', 'Attempt does not belong to current student');
+        }
+      }
+
+      return reply.send({
+        attemptId: attempt.id,
+        assignmentId: attempt.assignmentId,
+        studentId: attempt.studentId,
+        status: attempt.status,
+        createdAt: attempt.createdAt,
+        submittedAt: attempt.submittedAt,
+        totalScore: calculateTotalScore(attempt),
+        questionAttempts: attempt.questionAttempts.map((item) => ({
+          questionId: item.questionId,
+          score: item.score,
+          feedback: item.feedback,
+        })),
+      });
+    },
+  );
+
+  app.get(
+    '/assignments/:id/attempts',
+    { preHandler: [requireAuth, requireRole([Role.TEACHER, Role.ADMIN])] },
+    async (request, reply) => {
+      const auth = getRequestAuth(request, reply);
+      if (!auth) {
+        return;
+      }
+
+      const parsedParams = AssignmentParamsSchema.safeParse(request.params);
+      if (!parsedParams.success) {
+        return sendApiError(
+          reply,
+          400,
+          'VALIDATION_ERROR',
+          'Invalid assignment id',
+          zodDetails(parsedParams.error),
+        );
+      }
+
+      const assignment = await prisma.assignment.findFirst({
+        where: {
+          id: parsedParams.data.id,
+          organizationId: auth.organizationId,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!assignment) {
+        return sendApiError(reply, 404, 'ASSIGNMENT_NOT_FOUND', 'Assignment not found');
+      }
+
+      const attempts = await prisma.assignmentAttempt.findMany({
+        where: {
+          assignmentId: assignment.id,
+          organizationId: auth.organizationId,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        select: {
+          id: true,
+          studentId: true,
+          status: true,
+          submittedAt: true,
+          questionAttempts: {
+            select: {
+              score: true,
+            },
+          },
+        },
+      });
+
+      const normalizedAttempts = attempts.map((attempt) => ({
+        attemptId: attempt.id,
+        studentId: attempt.studentId,
+        status: attempt.status,
+        totalScore: calculateTotalScore(attempt),
+        submittedAt: attempt.submittedAt,
+      }));
+
+      const submittedAttempts = normalizedAttempts.filter((attempt) => attempt.status === AttemptStatus.SUBMITTED);
+      const submittedScoreSum = submittedAttempts.reduce((sum, attempt) => sum + attempt.totalScore, 0);
+      const avgScore = submittedAttempts.length === 0 ? 0 : submittedScoreSum / submittedAttempts.length;
+
+      return reply.send({
+        summary: {
+          totalAttempts: normalizedAttempts.length,
+          submitted: submittedAttempts.length,
+          avgScore,
+        },
+        attempts: normalizedAttempts,
+      });
+    },
+  );
+
   app.post(
     '/assignments/:id/start',
     { preHandler: [requireAuth, requireRole([Role.STUDENT])] },
