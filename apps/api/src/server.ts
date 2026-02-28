@@ -5,6 +5,7 @@ import { HealthResponseSchema, type HealthResponse } from '@skyvern/shared';
 import { env } from './lib/env.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAssignmentRoutes } from './routes/assignments.js';
+import { registerAttemptRoutes } from './routes/attempts.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerCurriculumRoutes } from './routes/curriculum.js';
 import { registerMeRoutes } from './routes/me.js';
@@ -32,6 +33,7 @@ export async function buildServer() {
   await registerMeRoutes(app);
   await registerAdminRoutes(app);
   await registerAssignmentRoutes(app);
+  await registerAttemptRoutes(app);
   await registerQuestionRoutes(app);
   await registerCurriculumRoutes(app);
 
