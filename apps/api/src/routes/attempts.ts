@@ -20,6 +20,15 @@ const StudentParamsSchema = z.object({
   id: z.string().cuid(),
 });
 
+const MasteryHistoryParamsSchema = z.object({
+  skillId: z.string().cuid(),
+});
+
+const StudentMasteryHistoryParamsSchema = z.object({
+  id: z.string().cuid(),
+  skillId: z.string().cuid(),
+});
+
 const SaveAnswerBodySchema = z.object({
   questionId: z.string().cuid(),
   answer: z.any(),
@@ -154,6 +163,139 @@ export async function registerAttemptRoutes(app: FastifyInstance) {
       });
 
       return reply.send({ skills });
+    },
+  );
+
+  app.get(
+    '/me/mastery/:skillId/history',
+    { preHandler: [requireAuth, requireRole([Role.STUDENT])] },
+    async (request, reply) => {
+      const auth = getRequestAuth(request, reply);
+      if (!auth) {
+        return;
+      }
+
+      const studentId = await getStudentIdForAuth(request, reply);
+      if (!studentId) {
+        return;
+      }
+
+      const parsedParams = MasteryHistoryParamsSchema.safeParse(request.params);
+      if (!parsedParams.success) {
+        return sendApiError(
+          reply,
+          400,
+          'VALIDATION_ERROR',
+          'Invalid skill id',
+          zodDetails(parsedParams.error),
+        );
+      }
+
+      const skill = await prisma.curriculumSkill.findFirst({
+        where: {
+          id: parsedParams.data.skillId,
+          topic: {
+            unit: {
+              subject: {
+                organizationId: auth.organizationId,
+              },
+            },
+          },
+        },
+        select: { id: true },
+      });
+
+      if (!skill) {
+        return sendApiError(reply, 404, 'SKILL_NOT_FOUND', 'Curriculum skill not found');
+      }
+
+      const history = await prisma.masterySnapshot.findMany({
+        where: {
+          studentId,
+          curriculumSkillId: skill.id,
+          organizationId: auth.organizationId,
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+        select: {
+          masteryLevel: true,
+          createdAt: true,
+        },
+      });
+
+      return reply.send({ history });
+    },
+  );
+
+  app.get(
+    '/students/:id/mastery/:skillId/history',
+    { preHandler: [requireAuth, requireRole([Role.TEACHER, Role.ADMIN])] },
+    async (request, reply) => {
+      const auth = getRequestAuth(request, reply);
+      if (!auth) {
+        return;
+      }
+
+      const parsedParams = StudentMasteryHistoryParamsSchema.safeParse(request.params);
+      if (!parsedParams.success) {
+        return sendApiError(
+          reply,
+          400,
+          'VALIDATION_ERROR',
+          'Invalid params',
+          zodDetails(parsedParams.error),
+        );
+      }
+
+      const student = await prisma.student.findFirst({
+        where: {
+          id: parsedParams.data.id,
+          organizationId: auth.organizationId,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!student) {
+        return sendApiError(reply, 404, 'STUDENT_NOT_FOUND', 'Student not found');
+      }
+
+      const skill = await prisma.curriculumSkill.findFirst({
+        where: {
+          id: parsedParams.data.skillId,
+          topic: {
+            unit: {
+              subject: {
+                organizationId: auth.organizationId,
+              },
+            },
+          },
+        },
+        select: { id: true },
+      });
+
+      if (!skill) {
+        return sendApiError(reply, 404, 'SKILL_NOT_FOUND', 'Curriculum skill not found');
+      }
+
+      const history = await prisma.masterySnapshot.findMany({
+        where: {
+          studentId: student.id,
+          curriculumSkillId: skill.id,
+          organizationId: auth.organizationId,
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+        select: {
+          masteryLevel: true,
+          createdAt: true,
+        },
+      });
+
+      return reply.send({ history });
     },
   );
 

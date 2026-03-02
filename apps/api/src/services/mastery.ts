@@ -75,12 +75,14 @@ export async function updateMastery(tx: Prisma.TransactionClient, attemptId: str
         id: true,
         totalAttempts: true,
         totalScore: true,
+        masteryLevel: true,
       },
     });
 
     const totalAttempts = (mastery?.totalAttempts ?? 0) + delta.attempts;
     const totalScore = (mastery?.totalScore ?? 0) + delta.score;
     const masteryLevel = totalAttempts === 0 ? 0 : totalScore / totalAttempts;
+    const previousMasteryLevel = mastery?.masteryLevel;
 
     if (mastery) {
       await tx.skillMastery.update({
@@ -93,18 +95,30 @@ export async function updateMastery(tx: Prisma.TransactionClient, attemptId: str
           masteryLevel,
         },
       });
-      continue;
+    } else {
+      await tx.skillMastery.create({
+        data: {
+          studentId: attempt.studentId,
+          curriculumSkillId,
+          organizationId: attempt.organizationId,
+          totalAttempts,
+          totalScore,
+          masteryLevel,
+        },
+      });
     }
 
-    await tx.skillMastery.create({
-      data: {
-        studentId: attempt.studentId,
-        curriculumSkillId,
-        organizationId: attempt.organizationId,
-        totalAttempts,
-        totalScore,
-        masteryLevel,
-      },
-    });
+    if (previousMasteryLevel !== masteryLevel) {
+      await tx.masterySnapshot.create({
+        data: {
+          studentId: attempt.studentId,
+          curriculumSkillId,
+          organizationId: attempt.organizationId,
+          masteryLevel,
+          totalAttempts,
+          totalScore,
+        },
+      });
+    }
   }
 }

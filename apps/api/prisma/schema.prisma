@@ -214,15 +214,14 @@ model Topic {
 }
 
 model Skill {
-  id               String             @id @default(cuid())
-  name             String
-  topicId          String
-  organizationId   String
-  topic            Topic              @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  objectives       Objective[]
-  questionTags     QuestionSkillTag[]
-  masterySnapshots MasterySnapshot[]
+  id             String             @id @default(cuid())
+  name           String
+  topicId        String
+  organizationId String
+  topic          Topic              @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  objectives     Objective[]
+  questionTags   QuestionSkillTag[]
 
   @@index([organizationId])
   @@index([topicId])
@@ -248,6 +247,7 @@ model CurriculumSkill {
   topic        CurriculumTopic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
   questionTags QuestionSkillTag[]
   masteries    SkillMastery[]
+  snapshots    MasterySnapshot[]
   createdAt    DateTime           @default(now())
 
   @@index([topicId])
@@ -428,21 +428,21 @@ model AttemptAnswer {
 }
 
 model MasterySnapshot {
-  id             String       @id @default(cuid())
-  studentId      String
-  skillId        String
-  mastery        Int
-  confidence     Int
-  updatedAt      DateTime     @default(now()) @updatedAt
-  organizationId String
-  student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  skill          Skill        @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                String          @id @default(cuid())
+  studentId         String
+  curriculumSkillId String
+  organizationId    String
+  masteryLevel      Float
+  totalAttempts     Int
+  totalScore        Int
+  createdAt         DateTime        @default(now())
+  student           Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  skill             CurriculumSkill @relation(fields: [curriculumSkillId], references: [id], onDelete: Cascade)
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@unique([studentId, skillId])
+  @@index([studentId, curriculumSkillId])
   @@index([organizationId])
-  @@index([studentId])
-  @@index([skillId])
+  @@index([createdAt])
 }
 
 model EventLog {
