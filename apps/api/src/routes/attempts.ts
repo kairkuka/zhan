@@ -6,6 +6,7 @@ import { sendApiError, zodDetails } from '../lib/apiError.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireRole } from '../plugins/authGuard.js';
 import { evaluateAttempt } from '../services/evaluator.js';
+import { computeMasteryTrend } from '../services/mastery-analytics.js';
 import { updateMastery } from '../services/mastery.js';
 
 const AssignmentParamsSchema = z.object({
@@ -25,6 +26,15 @@ const MasteryHistoryParamsSchema = z.object({
 });
 
 const StudentMasteryHistoryParamsSchema = z.object({
+  id: z.string().cuid(),
+  skillId: z.string().cuid(),
+});
+
+const MasteryProjectionParamsSchema = z.object({
+  skillId: z.string().cuid(),
+});
+
+const StudentMasteryProjectionParamsSchema = z.object({
   id: z.string().cuid(),
   skillId: z.string().cuid(),
 });
@@ -75,6 +85,54 @@ async function getStudentIdForAuth(request: FastifyRequest, reply: FastifyReply)
   }
 
   return student.id;
+}
+
+async function getCurriculumSkillInOrg(skillId: string, organizationId: string) {
+  return prisma.curriculumSkill.findFirst({
+    where: {
+      id: skillId,
+      topic: {
+        unit: {
+          subject: {
+            organizationId,
+          },
+        },
+      },
+    },
+    select: { id: true },
+  });
+}
+
+async function getMasteryHistoryForSkill(studentId: string, skillId: string, organizationId: string) {
+  return prisma.masterySnapshot.findMany({
+    where: {
+      studentId,
+      curriculumSkillId: skillId,
+      organizationId,
+    },
+    orderBy: {
+      createdAt: 'asc',
+    },
+    select: {
+      masteryLevel: true,
+      createdAt: true,
+    },
+  });
+}
+
+async function getCurrentMastery(studentId: string, skillId: string, organizationId: string) {
+  const mastery = await prisma.skillMastery.findFirst({
+    where: {
+      studentId,
+      curriculumSkillId: skillId,
+      organizationId,
+    },
+    select: {
+      masteryLevel: true,
+    },
+  });
+
+  return mastery?.masteryLevel ?? 0;
 }
 
 export async function registerAttemptRoutes(app: FastifyInstance) {
@@ -191,38 +249,13 @@ export async function registerAttemptRoutes(app: FastifyInstance) {
         );
       }
 
-      const skill = await prisma.curriculumSkill.findFirst({
-        where: {
-          id: parsedParams.data.skillId,
-          topic: {
-            unit: {
-              subject: {
-                organizationId: auth.organizationId,
-              },
-            },
-          },
-        },
-        select: { id: true },
-      });
+      const skill = await getCurriculumSkillInOrg(parsedParams.data.skillId, auth.organizationId);
 
       if (!skill) {
         return sendApiError(reply, 404, 'SKILL_NOT_FOUND', 'Curriculum skill not found');
       }
 
-      const history = await prisma.masterySnapshot.findMany({
-        where: {
-          studentId,
-          curriculumSkillId: skill.id,
-          organizationId: auth.organizationId,
-        },
-        orderBy: {
-          createdAt: 'asc',
-        },
-        select: {
-          masteryLevel: true,
-          createdAt: true,
-        },
-      });
+      const history = await getMasteryHistoryForSkill(studentId, skill.id, auth.organizationId);
 
       return reply.send({ history });
     },
@@ -262,40 +295,204 @@ export async function registerAttemptRoutes(app: FastifyInstance) {
         return sendApiError(reply, 404, 'STUDENT_NOT_FOUND', 'Student not found');
       }
 
-      const skill = await prisma.curriculumSkill.findFirst({
-        where: {
-          id: parsedParams.data.skillId,
-          topic: {
-            unit: {
-              subject: {
-                organizationId: auth.organizationId,
-              },
-            },
-          },
-        },
-        select: { id: true },
-      });
+      const skill = await getCurriculumSkillInOrg(parsedParams.data.skillId, auth.organizationId);
 
       if (!skill) {
         return sendApiError(reply, 404, 'SKILL_NOT_FOUND', 'Curriculum skill not found');
       }
 
-      const history = await prisma.masterySnapshot.findMany({
+      const history = await getMasteryHistoryForSkill(student.id, skill.id, auth.organizationId);
+
+      return reply.send({ history });
+    },
+  );
+
+  app.get(
+    '/me/mastery/:skillId/projection',
+    { preHandler: [requireAuth, requireRole([Role.STUDENT])] },
+    async (request, reply) => {
+      const auth = getRequestAuth(request, reply);
+      if (!auth) {
+        return;
+      }
+
+      const studentId = await getStudentIdForAuth(request, reply);
+      if (!studentId) {
+        return;
+      }
+
+      const parsedParams = MasteryProjectionParamsSchema.safeParse(request.params);
+      if (!parsedParams.success) {
+        return sendApiError(
+          reply,
+          400,
+          'VALIDATION_ERROR',
+          'Invalid skill id',
+          zodDetails(parsedParams.error),
+        );
+      }
+
+      const skill = await getCurriculumSkillInOrg(parsedParams.data.skillId, auth.organizationId);
+      if (!skill) {
+        return sendApiError(reply, 404, 'SKILL_NOT_FOUND', 'Curriculum skill not found');
+      }
+
+      const [history, currentMastery] = await Promise.all([
+        getMasteryHistoryForSkill(studentId, skill.id, auth.organizationId),
+        getCurrentMastery(studentId, skill.id, auth.organizationId),
+      ]);
+
+      const analytics = computeMasteryTrend(history);
+
+      return reply.send({
+        currentMastery,
+        trend: analytics.trend,
+        velocity: analytics.velocity,
+        risk: analytics.risk,
+      });
+    },
+  );
+
+  app.get(
+    '/students/:id/mastery/:skillId/projection',
+    { preHandler: [requireAuth, requireRole([Role.TEACHER, Role.ADMIN])] },
+    async (request, reply) => {
+      const auth = getRequestAuth(request, reply);
+      if (!auth) {
+        return;
+      }
+
+      const parsedParams = StudentMasteryProjectionParamsSchema.safeParse(request.params);
+      if (!parsedParams.success) {
+        return sendApiError(
+          reply,
+          400,
+          'VALIDATION_ERROR',
+          'Invalid params',
+          zodDetails(parsedParams.error),
+        );
+      }
+
+      const student = await prisma.student.findFirst({
         where: {
-          studentId: student.id,
-          curriculumSkillId: skill.id,
+          id: parsedParams.data.id,
           organizationId: auth.organizationId,
         },
-        orderBy: {
-          createdAt: 'asc',
-        },
         select: {
-          masteryLevel: true,
-          createdAt: true,
+          id: true,
         },
       });
 
-      return reply.send({ history });
+      if (!student) {
+        return sendApiError(reply, 404, 'STUDENT_NOT_FOUND', 'Student not found');
+      }
+
+      const skill = await getCurriculumSkillInOrg(parsedParams.data.skillId, auth.organizationId);
+      if (!skill) {
+        return sendApiError(reply, 404, 'SKILL_NOT_FOUND', 'Curriculum skill not found');
+      }
+
+      const [history, currentMastery] = await Promise.all([
+        getMasteryHistoryForSkill(student.id, skill.id, auth.organizationId),
+        getCurrentMastery(student.id, skill.id, auth.organizationId),
+      ]);
+
+      const analytics = computeMasteryTrend(history);
+
+      return reply.send({
+        currentMastery,
+        trend: analytics.trend,
+        velocity: analytics.velocity,
+        risk: analytics.risk,
+      });
+    },
+  );
+
+  app.get(
+    '/students/:id/mastery-overview',
+    { preHandler: [requireAuth, requireRole([Role.TEACHER, Role.ADMIN])] },
+    async (request, reply) => {
+      const auth = getRequestAuth(request, reply);
+      if (!auth) {
+        return;
+      }
+
+      const parsedParams = StudentParamsSchema.safeParse(request.params);
+      if (!parsedParams.success) {
+        return sendApiError(
+          reply,
+          400,
+          'VALIDATION_ERROR',
+          'Invalid student id',
+          zodDetails(parsedParams.error),
+        );
+      }
+
+      const student = await prisma.student.findFirst({
+        where: {
+          id: parsedParams.data.id,
+          organizationId: auth.organizationId,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!student) {
+        return sendApiError(reply, 404, 'STUDENT_NOT_FOUND', 'Student not found');
+      }
+
+      const [masteries, snapshots] = await Promise.all([
+        prisma.skillMastery.findMany({
+          where: {
+            studentId: student.id,
+            organizationId: auth.organizationId,
+          },
+          orderBy: {
+            updatedAt: 'desc',
+          },
+          select: {
+            curriculumSkillId: true,
+            masteryLevel: true,
+          },
+        }),
+        prisma.masterySnapshot.findMany({
+          where: {
+            studentId: student.id,
+            organizationId: auth.organizationId,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+          select: {
+            curriculumSkillId: true,
+            masteryLevel: true,
+            createdAt: true,
+          },
+        }),
+      ]);
+
+      const historyBySkill = new Map<string, Array<{ masteryLevel: number; createdAt: Date }>>();
+      for (const snapshot of snapshots) {
+        const existing = historyBySkill.get(snapshot.curriculumSkillId) ?? [];
+        existing.push({
+          masteryLevel: snapshot.masteryLevel,
+          createdAt: snapshot.createdAt,
+        });
+        historyBySkill.set(snapshot.curriculumSkillId, existing);
+      }
+
+      const skills = masteries.map((mastery) => {
+        const analytics = computeMasteryTrend(historyBySkill.get(mastery.curriculumSkillId) ?? []);
+        return {
+          skillId: mastery.curriculumSkillId,
+          currentMastery: mastery.masteryLevel,
+          trend: analytics.trend,
+          risk: analytics.risk,
+        };
+      });
+
+      return reply.send({ skills });
     },
   );
 
