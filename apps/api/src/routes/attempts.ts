@@ -7,6 +7,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireRole } from '../plugins/authGuard.js';
 import { evaluateAttempt } from '../services/evaluator.js';
 import { computeMasteryTrend } from '../services/mastery-analytics.js';
+import { loadStudentSnapshotsWithCap } from '../services/mastery-overview.js';
 import { updateMastery } from '../services/mastery.js';
 
 const AssignmentParamsSchema = z.object({
@@ -442,7 +443,7 @@ export async function registerAttemptRoutes(app: FastifyInstance) {
         return sendApiError(reply, 404, 'STUDENT_NOT_FOUND', 'Student not found');
       }
 
-      const [masteries, snapshotCount] = await Promise.all([
+      const [masteries, snapshots] = await Promise.all([
         prisma.skillMastery.findMany({
           where: {
             studentId: student.id,
@@ -456,43 +457,8 @@ export async function registerAttemptRoutes(app: FastifyInstance) {
             masteryLevel: true,
           },
         }),
-        prisma.masterySnapshot.count({
-          where: {
-            studentId: student.id,
-            organizationId: auth.organizationId,
-          },
-        }),
+        loadStudentSnapshotsWithCap(student.id, auth.organizationId),
       ]);
-
-      const snapshotQuery = {
-        where: {
-          studentId: student.id,
-          organizationId: auth.organizationId,
-        },
-        select: {
-          curriculumSkillId: true,
-          masteryLevel: true,
-          createdAt: true,
-        },
-      } as const;
-
-      const snapshots =
-        snapshotCount > 2000
-          ? (
-              await prisma.masterySnapshot.findMany({
-                ...snapshotQuery,
-                orderBy: {
-                  createdAt: 'desc',
-                },
-                take: 2000,
-              })
-            ).reverse()
-          : await prisma.masterySnapshot.findMany({
-              ...snapshotQuery,
-              orderBy: {
-                createdAt: 'asc',
-              },
-            });
 
       const historyBySkill = new Map<string, Array<{ masteryLevel: number; createdAt: Date }>>();
       for (const snapshot of snapshots) {
