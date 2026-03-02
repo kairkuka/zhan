@@ -6,12 +6,17 @@ import { sendApiError, zodDetails } from '../lib/apiError.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireRole } from '../plugins/authGuard.js';
 import { evaluateAttempt } from '../services/evaluator.js';
+import { updateMastery } from '../services/mastery.js';
 
 const AssignmentParamsSchema = z.object({
   id: z.string().cuid(),
 });
 
 const AttemptParamsSchema = z.object({
+  id: z.string().cuid(),
+});
+
+const StudentParamsSchema = z.object({
   id: z.string().cuid(),
 });
 
@@ -64,6 +69,94 @@ async function getStudentIdForAuth(request: FastifyRequest, reply: FastifyReply)
 }
 
 export async function registerAttemptRoutes(app: FastifyInstance) {
+  app.get(
+    '/me/mastery',
+    { preHandler: [requireAuth, requireRole([Role.STUDENT])] },
+    async (request, reply) => {
+      const auth = getRequestAuth(request, reply);
+      if (!auth) {
+        return;
+      }
+
+      const studentId = await getStudentIdForAuth(request, reply);
+      if (!studentId) {
+        return;
+      }
+
+      const skills = await prisma.skillMastery.findMany({
+        where: {
+          studentId,
+          organizationId: auth.organizationId,
+        },
+        orderBy: {
+          updatedAt: 'desc',
+        },
+        select: {
+          curriculumSkillId: true,
+          totalAttempts: true,
+          totalScore: true,
+          masteryLevel: true,
+        },
+      });
+
+      return reply.send({ skills });
+    },
+  );
+
+  app.get(
+    '/students/:id/mastery',
+    { preHandler: [requireAuth, requireRole([Role.TEACHER, Role.ADMIN])] },
+    async (request, reply) => {
+      const auth = getRequestAuth(request, reply);
+      if (!auth) {
+        return;
+      }
+
+      const parsedParams = StudentParamsSchema.safeParse(request.params);
+      if (!parsedParams.success) {
+        return sendApiError(
+          reply,
+          400,
+          'VALIDATION_ERROR',
+          'Invalid student id',
+          zodDetails(parsedParams.error),
+        );
+      }
+
+      const student = await prisma.student.findFirst({
+        where: {
+          id: parsedParams.data.id,
+          organizationId: auth.organizationId,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!student) {
+        return sendApiError(reply, 404, 'STUDENT_NOT_FOUND', 'Student not found');
+      }
+
+      const skills = await prisma.skillMastery.findMany({
+        where: {
+          studentId: student.id,
+          organizationId: auth.organizationId,
+        },
+        orderBy: {
+          updatedAt: 'desc',
+        },
+        select: {
+          curriculumSkillId: true,
+          totalAttempts: true,
+          totalScore: true,
+          masteryLevel: true,
+        },
+      });
+
+      return reply.send({ skills });
+    },
+  );
+
   app.get(
     '/me/attempts',
     { preHandler: [requireAuth, requireRole([Role.STUDENT])] },
@@ -504,6 +597,7 @@ export async function registerAttemptRoutes(app: FastifyInstance) {
         });
 
         const evaluation = await evaluateAttempt(tx, attempt.id);
+        await updateMastery(tx, attempt.id);
 
         return {
           updatedAttempt,
