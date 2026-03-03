@@ -3,34 +3,39 @@ import { describe, it } from 'node:test';
 
 import { prisma } from '../../lib/prisma.js';
 import { loadStudentSnapshotsPage, loadStudentSnapshotsWithCap } from '../mastery-overview.js';
-import type { MasteryOverviewSnapshot } from '../mastery-overview.js';
 
 type CountArgs = Parameters<typeof prisma.masterySnapshot.count>[0];
 type FindManyArgs = Parameters<typeof prisma.masterySnapshot.findMany>[0];
-type SnapshotItem = MasteryOverviewSnapshot;
+type FindManyResult = Awaited<ReturnType<typeof prisma.masterySnapshot.findMany>>;
 
-function mockMasterySnapshotDelegate(options: {
-  countResult: number;
-  findManyResult: SnapshotItem[];
-}) {
+type MockOptions = {
+  countResult?: number;
+  findManyResponder: (args: FindManyArgs, callIndex: number) => Promise<unknown[]> | unknown[];
+};
+
+function mockMasterySnapshotDelegate(options: MockOptions) {
   const originalCount = prisma.masterySnapshot.count;
   const originalFindMany = prisma.masterySnapshot.findMany;
 
   const countCalls: CountArgs[] = [];
   const findManyCalls: FindManyArgs[] = [];
+  let findManyCallIndex = 0;
 
   (prisma.masterySnapshot as { count: (args: CountArgs) => Promise<number> }).count = async (
     args: CountArgs,
   ) => {
     countCalls.push(args);
-    return options.countResult;
+    return options.countResult ?? 0;
   };
 
-  (prisma.masterySnapshot as { findMany: (args: FindManyArgs) => Promise<SnapshotItem[]> }).findMany = async (
-    args: FindManyArgs,
-  ) => {
+  (
+    prisma.masterySnapshot as {
+      findMany: (args: FindManyArgs) => Promise<FindManyResult>;
+    }
+  ).findMany = async (args: FindManyArgs) => {
     findManyCalls.push(args);
-    return [...options.findManyResult];
+    const result = await options.findManyResponder(args, findManyCallIndex++);
+    return result as FindManyResult;
   };
 
   return {
@@ -68,7 +73,7 @@ describe('loadStudentSnapshotsWithCap', () => {
 
     const mocked = mockMasterySnapshotDelegate({
       countResult: 3,
-      findManyResult: snapshots,
+      findManyResponder: async () => snapshots,
     });
 
     try {
@@ -118,11 +123,9 @@ describe('loadStudentSnapshotsWithCap', () => {
       },
     ];
 
-    const expectedChronological = [descSnapshots[2], descSnapshots[1], descSnapshots[0]];
-
     const mocked = mockMasterySnapshotDelegate({
       countResult: 5000,
-      findManyResult: descSnapshots,
+      findManyResponder: async () => [...descSnapshots],
     });
 
     try {
@@ -140,7 +143,7 @@ describe('loadStudentSnapshotsWithCap', () => {
       assert.deepEqual(findManyArgs.orderBy, { createdAt: 'desc' });
       assert.equal(findManyArgs.take, cap);
 
-      assert.deepEqual(result, expectedChronological);
+      assert.deepEqual(result, [descSnapshots[2], descSnapshots[1], descSnapshots[0]]);
     } finally {
       mocked.restore();
     }
@@ -151,15 +154,17 @@ describe('loadStudentSnapshotsPage', () => {
   const studentId = 'student_page_test_id';
   const organizationId = 'org_page_test_id';
 
-  it('loads first page in desc order and returns chronological snapshots', async () => {
+  it('loads first page in deterministic desc order and returns chronological snapshots', async () => {
     const limit = 2;
     const descSnapshots = [
       {
+        id: 'ckc',
         curriculumSkillId: 'skill_1',
         masteryLevel: 0.8,
         createdAt: new Date('2026-01-03T00:00:00.000Z'),
       },
       {
+        id: 'ckb',
         curriculumSkillId: 'skill_1',
         masteryLevel: 0.6,
         createdAt: new Date('2026-01-02T00:00:00.000Z'),
@@ -167,8 +172,7 @@ describe('loadStudentSnapshotsPage', () => {
     ];
 
     const mocked = mockMasterySnapshotDelegate({
-      countResult: 0,
-      findManyResult: descSnapshots,
+      findManyResponder: async () => descSnapshots,
     });
 
     try {
@@ -183,21 +187,33 @@ describe('loadStudentSnapshotsPage', () => {
         studentId,
         organizationId,
       });
-      assert.deepEqual(findManyArgs.orderBy, { createdAt: 'desc' });
+      assert.deepEqual(findManyArgs.orderBy, [{ createdAt: 'desc' }, { id: 'desc' }]);
       assert.equal(findManyArgs.take, limit);
 
-      assert.deepEqual(result.snapshots, [descSnapshots[1], descSnapshots[0]]);
-      assert.equal(result.nextCursor, '2026-01-02T00:00:00.000Z');
+      assert.deepEqual(result.snapshots, [
+        {
+          curriculumSkillId: 'skill_1',
+          masteryLevel: 0.6,
+          createdAt: new Date('2026-01-02T00:00:00.000Z'),
+        },
+        {
+          curriculumSkillId: 'skill_1',
+          masteryLevel: 0.8,
+          createdAt: new Date('2026-01-03T00:00:00.000Z'),
+        },
+      ]);
+      assert.equal(result.nextCursor, '2026-01-02T00:00:00.000Z|ckb');
     } finally {
       mocked.restore();
     }
   });
 
-  it('loads second page with cursor filter and returns chronological snapshots', async () => {
+  it('supports old cursor format (createdAt only) for backward compatibility', async () => {
     const limit = 2;
-    const cursor = new Date('2026-01-02T00:00:00.000Z');
+    const cursor = '2026-01-02T00:00:00.000Z';
     const descSnapshots = [
       {
+        id: 'cka',
         curriculumSkillId: 'skill_1',
         masteryLevel: 0.4,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -205,30 +221,109 @@ describe('loadStudentSnapshotsPage', () => {
     ];
 
     const mocked = mockMasterySnapshotDelegate({
-      countResult: 0,
-      findManyResult: descSnapshots,
+      findManyResponder: async () => descSnapshots,
     });
 
     try {
       const result = await loadStudentSnapshotsPage(studentId, organizationId, cursor, limit);
 
-      assert.equal(mocked.countCalls.length, 0);
       assert.equal(mocked.findManyCalls.length, 1);
-
       const findManyArgs = mocked.findManyCalls[0];
       assert.ok(findManyArgs);
       assert.deepEqual(findManyArgs.where, {
         studentId,
         organizationId,
         createdAt: {
-          lt: cursor,
+          lt: new Date('2026-01-02T00:00:00.000Z'),
         },
       });
-      assert.deepEqual(findManyArgs.orderBy, { createdAt: 'desc' });
+      assert.deepEqual(findManyArgs.orderBy, [{ createdAt: 'desc' }, { id: 'desc' }]);
       assert.equal(findManyArgs.take, limit);
 
-      assert.deepEqual(result.snapshots, descSnapshots);
+      assert.deepEqual(result.snapshots, [
+        {
+          curriculumSkillId: 'skill_1',
+          masteryLevel: 0.4,
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ]);
       assert.equal(result.nextCursor, null);
+    } finally {
+      mocked.restore();
+    }
+  });
+
+  it('handles identical timestamps without duplicates or gaps using deterministic cursor', async () => {
+    const limit = 2;
+    const sharedCreatedAt = new Date('2026-01-03T00:00:00.000Z');
+
+    const pageOneDesc = [
+      {
+        id: 'ckc',
+        curriculumSkillId: 'skill_1',
+        masteryLevel: 0.9,
+        createdAt: sharedCreatedAt,
+      },
+      {
+        id: 'ckb',
+        curriculumSkillId: 'skill_1',
+        masteryLevel: 0.7,
+        createdAt: sharedCreatedAt,
+      },
+    ];
+
+    const pageTwoDesc = [
+      {
+        id: 'cka',
+        curriculumSkillId: 'skill_1',
+        masteryLevel: 0.5,
+        createdAt: sharedCreatedAt,
+      },
+    ];
+
+    const mocked = mockMasterySnapshotDelegate({
+      findManyResponder: async (_args, callIndex) => (callIndex === 0 ? pageOneDesc : pageTwoDesc),
+    });
+
+    try {
+      const pageOne = await loadStudentSnapshotsPage(studentId, organizationId, undefined, limit);
+      assert.equal(pageOne.snapshots.length, 2);
+      assert.equal(pageOne.nextCursor, '2026-01-03T00:00:00.000Z|ckb');
+
+      const pageTwo = await loadStudentSnapshotsPage(
+        studentId,
+        organizationId,
+        pageOne.nextCursor ?? undefined,
+        limit,
+      );
+      assert.equal(pageTwo.snapshots.length, 1);
+
+      assert.equal(mocked.findManyCalls.length, 2);
+      const secondCallArgs = mocked.findManyCalls[1];
+      assert.ok(secondCallArgs);
+      assert.deepEqual(secondCallArgs.where, {
+        studentId,
+        organizationId,
+        OR: [
+          {
+            createdAt: {
+              lt: sharedCreatedAt,
+            },
+          },
+          {
+            createdAt: sharedCreatedAt,
+            id: {
+              lt: 'ckb',
+            },
+          },
+        ],
+      });
+
+      const allScores = [...pageOne.snapshots, ...pageTwo.snapshots].map((item) => item.masteryLevel);
+      const uniqueScores = new Set(allScores);
+      assert.equal(allScores.length, 3);
+      assert.equal(uniqueScores.size, 3);
+      assert.deepEqual([...uniqueScores].sort((a, b) => a - b), [0.5, 0.7, 0.9]);
     } finally {
       mocked.restore();
     }

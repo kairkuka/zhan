@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+
 import { prisma } from '../lib/prisma.js';
 
 export type MasteryOverviewSnapshot = {
@@ -10,6 +12,52 @@ export type MasteryOverviewSnapshotPage = {
   snapshots: MasteryOverviewSnapshot[];
   nextCursor: string | null;
 };
+
+type ParsedMasteryCursor = {
+  createdAt: Date;
+  id: string | null;
+};
+
+function parseMasteryCursor(cursor: string): ParsedMasteryCursor | null {
+  const separatorIndex = cursor.indexOf('|');
+
+  if (separatorIndex === -1) {
+    const createdAt = new Date(cursor);
+    if (Number.isNaN(createdAt.getTime())) {
+      return null;
+    }
+
+    return {
+      createdAt,
+      id: null,
+    };
+  }
+
+  if (
+    separatorIndex === 0 ||
+    separatorIndex === cursor.length - 1 ||
+    cursor.indexOf('|', separatorIndex + 1) !== -1
+  ) {
+    return null;
+  }
+
+  const createdAtValue = cursor.slice(0, separatorIndex);
+  const cursorId = cursor.slice(separatorIndex + 1);
+  const createdAt = new Date(createdAtValue);
+
+  if (Number.isNaN(createdAt.getTime()) || cursorId.length === 0) {
+    return null;
+  }
+
+  return {
+    createdAt,
+    id: cursorId,
+  };
+}
+
+export function isValidMasteryOverviewCursor(cursor: string): boolean {
+  return parseMasteryCursor(cursor) !== null;
+}
 
 export async function loadStudentSnapshotsWithCap(
   studentId: string,
@@ -54,28 +102,55 @@ export async function loadStudentSnapshotsWithCap(
 export async function loadStudentSnapshotsPage(
   studentId: string,
   organizationId: string,
-  cursor?: Date,
+  cursor?: string,
   limit = 200,
 ): Promise<MasteryOverviewSnapshotPage> {
-  const where = {
+  const parsedCursor = cursor ? parseMasteryCursor(cursor) : null;
+  if (cursor && !parsedCursor) {
+    throw new Error('INVALID_CURSOR');
+  }
+
+  let where: Prisma.MasterySnapshotWhereInput = {
     studentId,
     organizationId,
-    ...(cursor
-      ? {
-          createdAt: {
-            lt: cursor,
-          },
-        }
-      : {}),
   };
+
+  if (parsedCursor) {
+    if (parsedCursor.id) {
+      where = {
+        studentId,
+        organizationId,
+        OR: [
+          {
+            createdAt: {
+              lt: parsedCursor.createdAt,
+            },
+          },
+          {
+            createdAt: parsedCursor.createdAt,
+            id: {
+              lt: parsedCursor.id,
+            },
+          },
+        ],
+      };
+    } else {
+      where = {
+        studentId,
+        organizationId,
+        createdAt: {
+          lt: parsedCursor.createdAt,
+        },
+      };
+    }
+  }
 
   const snapshotsDesc = await prisma.masterySnapshot.findMany({
     where,
-    orderBy: {
-      createdAt: 'desc',
-    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit,
     select: {
+      id: true,
       curriculumSkillId: true,
       masteryLevel: true,
       createdAt: true,
@@ -84,11 +159,24 @@ export async function loadStudentSnapshotsPage(
 
   const nextCursor =
     snapshotsDesc.length === limit
-      ? (snapshotsDesc[snapshotsDesc.length - 1]?.createdAt.toISOString() ?? null)
+      ? (() => {
+          const last = snapshotsDesc[snapshotsDesc.length - 1];
+          if (!last) {
+            return null;
+          }
+
+          return `${last.createdAt.toISOString()}|${last.id}`;
+        })()
       : null;
 
   return {
-    snapshots: snapshotsDesc.reverse(),
+    snapshots: snapshotsDesc
+      .map((snapshot) => ({
+        curriculumSkillId: snapshot.curriculumSkillId,
+        masteryLevel: snapshot.masteryLevel,
+        createdAt: snapshot.createdAt,
+      }))
+      .reverse(),
     nextCursor,
   };
 }

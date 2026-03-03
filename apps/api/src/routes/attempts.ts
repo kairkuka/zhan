@@ -7,7 +7,11 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireRole } from '../plugins/authGuard.js';
 import { evaluateAttempt } from '../services/evaluator.js';
 import { computeMasteryTrend } from '../services/mastery-analytics.js';
-import { loadStudentSnapshotsPage, loadStudentSnapshotsWithCap } from '../services/mastery-overview.js';
+import {
+  isValidMasteryOverviewCursor,
+  loadStudentSnapshotsPage,
+  loadStudentSnapshotsWithCap,
+} from '../services/mastery-overview.js';
 import { updateMastery } from '../services/mastery.js';
 
 const AssignmentParamsSchema = z.object({
@@ -41,7 +45,7 @@ const StudentMasteryProjectionParamsSchema = z.object({
 });
 
 const MasteryOverviewQuerySchema = z.object({
-  cursor: z.string().datetime({ offset: true }).optional(),
+  cursor: z.string().min(1).refine(isValidMasteryOverviewCursor, 'Invalid cursor').optional(),
   limit: z.coerce.number().int().min(1).max(500).optional(),
 });
 
@@ -462,7 +466,7 @@ export async function registerAttemptRoutes(app: FastifyInstance) {
       const isPaginationUsed =
         parsedQuery.data.cursor !== undefined || parsedQuery.data.limit !== undefined;
       const paginationLimit = parsedQuery.data.limit ?? 200;
-      const paginationCursor = parsedQuery.data.cursor ? new Date(parsedQuery.data.cursor) : undefined;
+      const paginationCursor = parsedQuery.data.cursor;
 
       const [masteries, snapshotData] = await Promise.all([
         prisma.skillMastery.findMany({
