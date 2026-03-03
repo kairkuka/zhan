@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { prisma } from '../../lib/prisma.js';
-import { loadStudentSnapshotsWithCap } from '../mastery-overview.js';
+import { loadStudentSnapshotsPage, loadStudentSnapshotsWithCap } from '../mastery-overview.js';
 import type { MasteryOverviewSnapshot } from '../mastery-overview.js';
 
 type CountArgs = Parameters<typeof prisma.masterySnapshot.count>[0];
@@ -141,6 +141,94 @@ describe('loadStudentSnapshotsWithCap', () => {
       assert.equal(findManyArgs.take, cap);
 
       assert.deepEqual(result, expectedChronological);
+    } finally {
+      mocked.restore();
+    }
+  });
+});
+
+describe('loadStudentSnapshotsPage', () => {
+  const studentId = 'student_page_test_id';
+  const organizationId = 'org_page_test_id';
+
+  it('loads first page in desc order and returns chronological snapshots', async () => {
+    const limit = 2;
+    const descSnapshots = [
+      {
+        curriculumSkillId: 'skill_1',
+        masteryLevel: 0.8,
+        createdAt: new Date('2026-01-03T00:00:00.000Z'),
+      },
+      {
+        curriculumSkillId: 'skill_1',
+        masteryLevel: 0.6,
+        createdAt: new Date('2026-01-02T00:00:00.000Z'),
+      },
+    ];
+
+    const mocked = mockMasterySnapshotDelegate({
+      countResult: 0,
+      findManyResult: descSnapshots,
+    });
+
+    try {
+      const result = await loadStudentSnapshotsPage(studentId, organizationId, undefined, limit);
+
+      assert.equal(mocked.countCalls.length, 0);
+      assert.equal(mocked.findManyCalls.length, 1);
+
+      const findManyArgs = mocked.findManyCalls[0];
+      assert.ok(findManyArgs);
+      assert.deepEqual(findManyArgs.where, {
+        studentId,
+        organizationId,
+      });
+      assert.deepEqual(findManyArgs.orderBy, { createdAt: 'desc' });
+      assert.equal(findManyArgs.take, limit);
+
+      assert.deepEqual(result.snapshots, [descSnapshots[1], descSnapshots[0]]);
+      assert.equal(result.nextCursor, '2026-01-02T00:00:00.000Z');
+    } finally {
+      mocked.restore();
+    }
+  });
+
+  it('loads second page with cursor filter and returns chronological snapshots', async () => {
+    const limit = 2;
+    const cursor = new Date('2026-01-02T00:00:00.000Z');
+    const descSnapshots = [
+      {
+        curriculumSkillId: 'skill_1',
+        masteryLevel: 0.4,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    ];
+
+    const mocked = mockMasterySnapshotDelegate({
+      countResult: 0,
+      findManyResult: descSnapshots,
+    });
+
+    try {
+      const result = await loadStudentSnapshotsPage(studentId, organizationId, cursor, limit);
+
+      assert.equal(mocked.countCalls.length, 0);
+      assert.equal(mocked.findManyCalls.length, 1);
+
+      const findManyArgs = mocked.findManyCalls[0];
+      assert.ok(findManyArgs);
+      assert.deepEqual(findManyArgs.where, {
+        studentId,
+        organizationId,
+        createdAt: {
+          lt: cursor,
+        },
+      });
+      assert.deepEqual(findManyArgs.orderBy, { createdAt: 'desc' });
+      assert.equal(findManyArgs.take, limit);
+
+      assert.deepEqual(result.snapshots, descSnapshots);
+      assert.equal(result.nextCursor, null);
     } finally {
       mocked.restore();
     }

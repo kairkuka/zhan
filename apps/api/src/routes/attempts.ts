@@ -7,7 +7,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireRole } from '../plugins/authGuard.js';
 import { evaluateAttempt } from '../services/evaluator.js';
 import { computeMasteryTrend } from '../services/mastery-analytics.js';
-import { loadStudentSnapshotsWithCap } from '../services/mastery-overview.js';
+import { loadStudentSnapshotsPage, loadStudentSnapshotsWithCap } from '../services/mastery-overview.js';
 import { updateMastery } from '../services/mastery.js';
 
 const AssignmentParamsSchema = z.object({
@@ -38,6 +38,11 @@ const MasteryProjectionParamsSchema = z.object({
 const StudentMasteryProjectionParamsSchema = z.object({
   id: z.string().cuid(),
   skillId: z.string().cuid(),
+});
+
+const MasteryOverviewQuerySchema = z.object({
+  cursor: z.string().datetime({ offset: true }).optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
 });
 
 const SaveAnswerBodySchema = z.object({
@@ -443,7 +448,23 @@ export async function registerAttemptRoutes(app: FastifyInstance) {
         return sendApiError(reply, 404, 'STUDENT_NOT_FOUND', 'Student not found');
       }
 
-      const [masteries, snapshots] = await Promise.all([
+      const parsedQuery = MasteryOverviewQuerySchema.safeParse(request.query);
+      if (!parsedQuery.success) {
+        return sendApiError(
+          reply,
+          400,
+          'VALIDATION_ERROR',
+          'Invalid pagination query',
+          zodDetails(parsedQuery.error),
+        );
+      }
+
+      const isPaginationUsed =
+        parsedQuery.data.cursor !== undefined || parsedQuery.data.limit !== undefined;
+      const paginationLimit = parsedQuery.data.limit ?? 200;
+      const paginationCursor = parsedQuery.data.cursor ? new Date(parsedQuery.data.cursor) : undefined;
+
+      const [masteries, snapshotData] = await Promise.all([
         prisma.skillMastery.findMany({
           where: {
             studentId: student.id,
@@ -457,11 +478,21 @@ export async function registerAttemptRoutes(app: FastifyInstance) {
             masteryLevel: true,
           },
         }),
-        loadStudentSnapshotsWithCap(student.id, auth.organizationId),
+        isPaginationUsed
+          ? loadStudentSnapshotsPage(
+              student.id,
+              auth.organizationId,
+              paginationCursor,
+              paginationLimit,
+            )
+          : loadStudentSnapshotsWithCap(student.id, auth.organizationId).then((snapshots) => ({
+              snapshots,
+              nextCursor: null,
+            })),
       ]);
 
       const historyBySkill = new Map<string, Array<{ masteryLevel: number; createdAt: Date }>>();
-      for (const snapshot of snapshots) {
+      for (const snapshot of snapshotData.snapshots) {
         const existing = historyBySkill.get(snapshot.curriculumSkillId) ?? [];
         existing.push({
           masteryLevel: snapshot.masteryLevel,
@@ -479,6 +510,13 @@ export async function registerAttemptRoutes(app: FastifyInstance) {
           risk: analytics.risk,
         };
       });
+
+      if (isPaginationUsed) {
+        return reply.send({
+          skills,
+          nextCursor: snapshotData.nextCursor,
+        });
+      }
 
       return reply.send({ skills });
     },
