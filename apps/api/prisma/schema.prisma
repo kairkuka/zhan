@@ -442,6 +442,7 @@ model MasterySnapshot {
 
   @@index([studentId, curriculumSkillId])
   @@index([studentId, organizationId, createdAt(sort: Desc)])
+  @@index([studentId, organizationId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([organizationId])
   @@index([createdAt])
 }
