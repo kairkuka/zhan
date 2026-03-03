@@ -441,6 +441,7 @@ model MasterySnapshot {
   organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([studentId, curriculumSkillId])
+  @@index([studentId, organizationId, createdAt(sort: Desc)])
   @@index([organizationId])
   @@index([createdAt])
 }
