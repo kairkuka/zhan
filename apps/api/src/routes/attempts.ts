@@ -12,7 +12,12 @@ import {
   loadStudentSnapshotsPage,
   loadStudentSnapshotsWithCap,
 } from '../services/mastery-overview.js';
-import { aggregateMasteryTrend, type MasteryTrendBucket } from '../services/mastery-trend.js';
+import {
+  aggregateMasteryTrend,
+  isValidMasteryTrendCursor,
+  loadMasteryTrendSnapshotsPage,
+  type MasteryTrendBucket,
+} from '../services/mastery-trend.js';
 import { updateMastery } from '../services/mastery.js';
 
 const AssignmentParamsSchema = z.object({
@@ -54,6 +59,8 @@ const MasteryTrendQuerySchema = z.object({
   from: z.string().datetime({ offset: true }).optional(),
   to: z.string().datetime({ offset: true }).optional(),
   bucket: z.enum(['day', 'week', 'month']).optional(),
+  cursor: z.string().refine(isValidMasteryTrendCursor, 'Invalid cursor').optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
 });
 
 const SaveAnswerBodySchema = z.object({
@@ -477,39 +484,22 @@ export async function registerAttemptRoutes(app: FastifyInstance) {
         return sendApiError(reply, 404, 'STUDENT_NOT_FOUND', 'Student not found');
       }
 
-      const createdAtFilter: {
-        gte?: Date;
-        lte?: Date;
-      } = {};
-
-      if (fromDate) {
-        createdAtFilter.gte = fromDate;
-      }
-
-      if (toDate) {
-        createdAtFilter.lte = toDate;
-      }
-
-      const snapshots = await prisma.masterySnapshot.findMany({
-        where: {
-          studentId: student.id,
-          organizationId: auth.organizationId,
-          ...(fromDate || toDate ? { createdAt: createdAtFilter } : {}),
-        },
-        orderBy: {
-          createdAt: 'asc',
-        },
-        select: {
-          curriculumSkillId: true,
-          masteryLevel: true,
-          createdAt: true,
-        },
+      const snapshotPage = await loadMasteryTrendSnapshotsPage({
+        studentId: student.id,
+        organizationId: auth.organizationId,
+        from: fromDate,
+        to: toDate,
+        cursor: parsedQuery.data.cursor,
+        limit: parsedQuery.data.limit ?? 200,
       });
 
       const bucket = (parsedQuery.data.bucket ?? 'week') as MasteryTrendBucket;
-      const buckets = aggregateMasteryTrend(snapshots, bucket);
+      const buckets = aggregateMasteryTrend(snapshotPage.snapshots, bucket);
 
-      return reply.send({ buckets });
+      return reply.send({
+        buckets,
+        nextCursor: snapshotPage.nextCursor,
+      });
     },
   );
 
