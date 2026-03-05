@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+import { RequireAuth } from '../../../components/RequireAuth';
 import { apiFetch, getToken, getReadableErrorMessage } from '../../../lib/api';
+import { useRequireAuth } from '../../../lib/useAuth';
 
 type OrgUser = {
   id: string;
@@ -17,6 +19,7 @@ type AdminUsersResponse = {
 };
 
 export default function AdminUsersPage() {
+  const { isAuthenticated } = useRequireAuth();
   const [users, setUsers] = useState<OrgUser[]>([]);
   const [message, setMessage] = useState('');
 
@@ -42,26 +45,32 @@ export default function AdminUsersPage() {
   }
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
     void loadUsers();
-  }, []);
+  }, [isAuthenticated]);
 
   return (
-    <main className="container">
-      <h1>Admin: Organization Users</h1>
-      <p>
-        <Link href="/">Home</Link> | <Link href="/login">Login</Link>
-      </p>
-      <button type="button" onClick={() => void loadUsers()}>
-        Reload
-      </button>
-      {message && <p>{message}</p>}
-      <ul>
-        {users.map((user) => (
-          <li key={user.id}>
-            {user.email} ({user.role})
-          </li>
-        ))}
-      </ul>
-    </main>
+    <RequireAuth>
+      <main className="container">
+        <h1>Admin: Organization Users</h1>
+        <p>
+          <Link href="/">Home</Link> | <Link href="/login">Login</Link>
+        </p>
+        <button type="button" onClick={() => void loadUsers()}>
+          Reload
+        </button>
+        {message && <p>{message}</p>}
+        <ul>
+          {users.map((user) => (
+            <li key={user.id}>
+              {user.email} ({user.role})
+            </li>
+          ))}
+        </ul>
+      </main>
+    </RequireAuth>
   );
 }
