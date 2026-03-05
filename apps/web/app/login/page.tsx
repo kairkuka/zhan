@@ -16,7 +16,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (getToken()) {
-      router.replace('/students');
+      router.replace('/dashboard');
     }
   }, [router]);
 
@@ -28,7 +28,7 @@ export default function LoginPage() {
     try {
       const token = await login(email.trim(), password);
       setToken(token);
-      router.replace('/students');
+      router.replace('/dashboard');
     } catch (error) {
       setErrorMessage(getReadableErrorMessage(error, 'Login failed.'));
       setIsSubmitting(false);

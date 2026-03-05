@@ -1,46 +1,64 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-import { getReadableErrorMessage, getToken, listStudents, logout } from '../../lib/api';
+import { getReadableErrorMessage, isAbortError, listStudents } from '../../lib/api';
+import { useRequireAuth } from '../../lib/useAuth';
 import type { Student } from '../../types/api';
 
 type PageState = 'loading' | 'ready' | 'error';
 
 export default function StudentsPage() {
-  const router = useRouter();
+  const isAuthenticated = useRequireAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [state, setState] = useState<PageState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!getToken()) {
-      router.replace('/login');
-      return;
-    }
-
-    void loadStudents();
-  }, [router]);
-
-  async function loadStudents() {
+  const loadStudents = useCallback(async (signal?: AbortSignal) => {
     setState('loading');
     setErrorMessage(null);
 
     try {
-      const result = await listStudents();
+      const result = await listStudents({ signal });
+
+      if (signal?.aborted) {
+        return;
+      }
+
       setStudents(result);
       setState('ready');
     } catch (error) {
+      if (isAbortError(error) || signal?.aborted) {
+        return;
+      }
+
       setState('error');
       setErrorMessage(getReadableErrorMessage(error, 'Failed to load students.'));
     }
-  }
+  }, []);
 
-  function handleLogout() {
-    logout();
-    router.replace('/login');
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    const controller = new AbortController();
+    void loadStudents(controller.signal);
+
+    return () => {
+      controller.abort();
+    };
+  }, [isAuthenticated, loadStudents]);
+
+  if (!isAuthenticated) {
+    return (
+      <main className="page">
+        <section className="panel">
+          <p className="muted">Checking session...</p>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -48,18 +66,18 @@ export default function StudentsPage() {
       <section className="panel">
         <div className="headerRow">
           <h1>Students</h1>
-          <div className="buttonRow">
-            <button className="buttonSecondary" type="button" onClick={() => void loadStudents()}>
-              Refresh
-            </button>
-            <button className="buttonSecondary" type="button" onClick={handleLogout}>
-              Logout
-            </button>
-          </div>
+          <button
+            className="buttonSecondary"
+            type="button"
+            onClick={() => void loadStudents()}
+            disabled={state === 'loading'}
+          >
+            Refresh
+          </button>
         </div>
 
         <p className="muted">
-          <Link href="/">Home</Link>
+          Select a student to open mastery overview and trend analytics.
         </p>
 
         {state === 'loading' && <p className="muted">Loading students...</p>}

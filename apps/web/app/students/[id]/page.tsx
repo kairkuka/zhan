@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { OverviewCard } from '../../../components/OverviewCard';
 import { TrendChart } from '../../../components/TrendChart';
@@ -10,15 +10,16 @@ import {
   getReadableErrorMessage,
   getStudentMasteryOverview,
   getStudentMasteryTrend,
-  getToken,
+  isAbortError,
 } from '../../../lib/api';
+import { useRequireAuth } from '../../../lib/useAuth';
 import type { MasteryOverview, TrendBucket } from '../../../types/api';
 
 export default function StudentAnalyticsPage() {
-  const router = useRouter();
   const params = useParams<{ id: string }>();
   const studentId = useMemo(() => params.id ?? '', [params.id]);
 
+  const isAuthenticated = useRequireAuth();
   const [overview, setOverview] = useState<MasteryOverview | null>(null);
   const [trendBuckets, setTrendBuckets] = useState<TrendBucket[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -26,44 +27,61 @@ export default function StudentAnalyticsPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadInitialData = useCallback(async (signal?: AbortSignal) => {
     if (!studentId) {
       return;
     }
 
-    if (!getToken()) {
-      router.replace('/login');
-      return;
-    }
-
-    void loadInitialData(studentId);
-  }, [router, studentId]);
-
-  async function loadInitialData(currentStudentId: string) {
     setIsInitialLoading(true);
     setErrorMessage(null);
 
     try {
       const [overviewResult, trendResult] = await Promise.all([
-        getStudentMasteryOverview(currentStudentId),
-        getStudentMasteryTrend({
-          studentId: currentStudentId,
-          bucket: 'week',
-          limit: 200,
-        }),
+        getStudentMasteryOverview(studentId, { signal }),
+        getStudentMasteryTrend(
+          {
+            studentId,
+            bucket: 'week',
+            limit: 200,
+          },
+          { signal },
+        ),
       ]);
+
+      if (signal?.aborted) {
+        return;
+      }
 
       setOverview(overviewResult);
       setTrendBuckets(trendResult.buckets);
       setNextCursor(trendResult.nextCursor ?? null);
     } catch (error) {
+      if (isAbortError(error) || signal?.aborted) {
+        return;
+      }
+
       setErrorMessage(getReadableErrorMessage(error, 'Failed to load student analytics.'));
     } finally {
-      setIsInitialLoading(false);
+      if (!signal?.aborted) {
+        setIsInitialLoading(false);
+      }
     }
-  }
+  }, [studentId]);
 
-  async function handleLoadMore() {
+  useEffect(() => {
+    if (!isAuthenticated || !studentId) {
+      return;
+    }
+
+    const controller = new AbortController();
+    void loadInitialData(controller.signal);
+
+    return () => {
+      controller.abort();
+    };
+  }, [isAuthenticated, loadInitialData, studentId]);
+
+  const handleLoadMore = useCallback(async () => {
     if (!studentId || !nextCursor || isLoadingMore) {
       return;
     }
@@ -86,6 +104,16 @@ export default function StudentAnalyticsPage() {
     } finally {
       setIsLoadingMore(false);
     }
+  }, [isLoadingMore, nextCursor, studentId]);
+
+  if (!isAuthenticated) {
+    return (
+      <main className="page">
+        <section className="panel">
+          <p className="muted">Checking session...</p>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -108,8 +136,8 @@ export default function StudentAnalyticsPage() {
 
         {!isInitialLoading && !errorMessage && overview && (
           <div className="stack">
-            <OverviewCard overview={overview} />
-            <TrendChart buckets={trendBuckets} />
+            <OverviewCard title="Mastery overview" overview={overview} />
+            <TrendChart buckets={trendBuckets} title="Weekly mastery trend" />
             {nextCursor && (
               <div className="buttonRow">
                 <button className="button" type="button" onClick={() => void handleLoadMore()}>
@@ -118,6 +146,13 @@ export default function StudentAnalyticsPage() {
               </div>
             )}
           </div>
+        )}
+
+        {!isInitialLoading && !errorMessage && !overview && (
+          <section className="card">
+            <h2 className="cardTitle">No analytics data</h2>
+            <p className="muted">No overview is available for this student yet.</p>
+          </section>
         )}
       </section>
     </main>

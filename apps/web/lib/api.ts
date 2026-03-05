@@ -1,7 +1,22 @@
-import type { MasteryOverview, MasteryTrendResponse, Student, TrendBucket } from '../types/api';
+import type {
+  MasteryOverview,
+  MasterySkill,
+  MasteryTrendResponse,
+  Student,
+  TrendBucket,
+} from '../types/api';
 
 const API_URL = 'http://localhost:4000';
 const TOKEN_STORAGE_KEY = 'jwt';
+
+export class ApiUnauthorizedError extends Error {
+  readonly status = 401;
+
+  constructor(message = 'Unauthorized') {
+    super(message);
+    this.name = 'ApiUnauthorizedError';
+  }
+}
 
 type ApiFetchOptions = RequestInit & {
   auth?: boolean;
@@ -11,9 +26,14 @@ type StudentLike = {
   id: string;
 };
 
-type LegacyOverviewSkill = {
+type OverviewSkillLike = {
+  skillId?: string;
   currentMastery: number;
   risk?: string;
+};
+
+type LoginResponse = {
+  token: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -97,58 +117,82 @@ function normalizeStudents(payload: unknown): Student[] {
   throw new Error('Invalid students response');
 }
 
-function normalizeOverview(payload: unknown): MasteryOverview {
-  if (isRecord(payload)) {
-    const averageMastery = payload.averageMastery;
-    const skillsTracked = payload.skillsTracked;
-    const riskLevel = payload.riskLevel;
+function normalizeOverviewSkills(raw: unknown): MasterySkill[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
 
-    if (typeof averageMastery === 'number' && typeof skillsTracked === 'number') {
-      return {
-        averageMastery,
-        skillsTracked,
-        riskLevel: typeof riskLevel === 'string' ? riskLevel : undefined,
-      };
+  const skills: MasterySkill[] = [];
+
+  for (const item of raw) {
+    if (!isRecord(item) || typeof item.currentMastery !== 'number') {
+      continue;
     }
 
-    if (Array.isArray(payload.skills)) {
-      const skills = payload.skills.filter(
-        (item): item is LegacyOverviewSkill =>
-          isRecord(item) && typeof item.currentMastery === 'number',
-      );
+    const parsedSkill: OverviewSkillLike = {
+      currentMastery: item.currentMastery,
+      skillId: typeof item.skillId === 'string' ? item.skillId : undefined,
+      risk: typeof item.risk === 'string' ? item.risk : undefined,
+    };
 
-      const masterySum = skills.reduce((sum, item) => sum + item.currentMastery, 0);
-      const average = skills.length > 0 ? masterySum / skills.length : 0;
+    skills.push(parsedSkill);
+  }
 
-      const priority = new Map<string, number>([
-        ['HIGH', 3],
-        ['MEDIUM', 2],
-        ['LOW', 1],
-      ]);
+  return skills;
+}
 
-      let currentRisk: string | undefined;
-      let currentPriority = 0;
-      for (const item of skills) {
-        if (!item.risk) {
-          continue;
-        }
+function normalizeOverview(payload: unknown): MasteryOverview {
+  if (!isRecord(payload)) {
+    throw new Error('Invalid mastery overview response');
+  }
 
-        const score = priority.get(item.risk.toUpperCase()) ?? 0;
-        if (score > currentPriority) {
-          currentPriority = score;
-          currentRisk = item.risk;
-        }
-      }
+  const averageMastery = payload.averageMastery;
+  const skillsTracked = payload.skillsTracked;
+  const riskLevel = payload.riskLevel;
 
-      return {
-        averageMastery: average,
-        skillsTracked: skills.length,
-        riskLevel: currentRisk,
-      };
+  if (typeof averageMastery === 'number' && typeof skillsTracked === 'number') {
+    return {
+      averageMastery,
+      skillsTracked,
+      riskLevel: typeof riskLevel === 'string' ? riskLevel : undefined,
+      skills: normalizeOverviewSkills(payload.skills),
+    };
+  }
+
+  const skills = normalizeOverviewSkills(payload.skills);
+  if (skills.length === 0) {
+    throw new Error('Invalid mastery overview response');
+  }
+
+  const masterySum = skills.reduce((sum, item) => sum + item.currentMastery, 0);
+  const average = masterySum / skills.length;
+
+  const priority = new Map<string, number>([
+    ['HIGH', 3],
+    ['MEDIUM', 2],
+    ['LOW', 1],
+  ]);
+
+  let currentRisk: string | undefined;
+  let currentPriority = 0;
+  for (const item of skills) {
+    if (!item.risk) {
+      continue;
+    }
+
+    const score = priority.get(item.risk.toUpperCase()) ?? 0;
+    if (score > currentPriority) {
+      currentPriority = score;
+      currentRisk = item.risk;
     }
   }
 
-  throw new Error('Invalid mastery overview response');
+  return {
+    averageMastery: average,
+    skillsTracked: skills.length,
+    riskLevel: currentRisk,
+    skills,
+  };
 }
 
 function normalizeTrendResponse(payload: unknown): MasteryTrendResponse {
@@ -169,7 +213,7 @@ function normalizeTrendResponse(payload: unknown): MasteryTrendResponse {
 function ensureToken(): string {
   const token = getToken();
   if (!token) {
-    throw new Error('Authentication token is missing. Please login again.');
+    throw new ApiUnauthorizedError('Authentication token is missing. Please login again.');
   }
 
   return token;
@@ -182,6 +226,14 @@ function buildApiUrl(path: string): string {
 
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${API_URL}${normalizedPath}`;
+}
+
+function handleUnauthorized(): void {
+  logout();
+
+  if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+    window.location.replace('/login');
+  }
 }
 
 export function getToken(): string | null {
@@ -240,6 +292,11 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       : null;
 
   if (!response.ok) {
+    if (auth && response.status === 401) {
+      handleUnauthorized();
+      throw new ApiUnauthorizedError('Session expired. Please login again.');
+    }
+
     throw new Error(parseApiError(payload, response.status));
   }
 
@@ -247,35 +304,44 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 }
 
 export async function login(email: string, password: string): Promise<string> {
-  const payload = await apiFetch<unknown>('/auth/login', {
+  const payload = await apiFetch<LoginResponse>('/auth/login', {
     method: 'POST',
     auth: false,
     body: JSON.stringify({ email, password }),
   });
 
-  if (isRecord(payload) && typeof payload.token === 'string') {
+  if (typeof payload.token === 'string' && payload.token.length > 0) {
     return payload.token;
   }
 
   throw new Error('Invalid login response: token is missing');
 }
 
-export async function listStudents(): Promise<Student[]> {
-  const payload = await apiFetch<unknown>('/students');
+export async function listStudents(options: { signal?: AbortSignal } = {}): Promise<Student[]> {
+  const payload = await apiFetch<unknown>('/students', { signal: options.signal });
   return normalizeStudents(payload);
 }
 
-export async function getStudentMasteryOverview(studentId: string): Promise<MasteryOverview> {
-  const payload = await apiFetch<unknown>(`/students/${studentId}/mastery-overview`);
+export async function getStudentMasteryOverview(
+  studentId: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<MasteryOverview> {
+  const payload = await apiFetch<unknown>(`/students/${studentId}/mastery-overview`, {
+    signal: options.signal,
+  });
+
   return normalizeOverview(payload);
 }
 
-export async function getStudentMasteryTrend(params: {
-  studentId: string;
-  bucket?: 'day' | 'week' | 'month';
-  cursor?: string;
-  limit?: number;
-}): Promise<MasteryTrendResponse> {
+export async function getStudentMasteryTrend(
+  params: {
+    studentId: string;
+    bucket?: 'day' | 'week' | 'month';
+    cursor?: string;
+    limit?: number;
+  },
+  options: { signal?: AbortSignal } = {},
+): Promise<MasteryTrendResponse> {
   const search = new URLSearchParams();
   search.set('bucket', params.bucket ?? 'week');
 
@@ -289,12 +355,25 @@ export async function getStudentMasteryTrend(params: {
 
   const payload = await apiFetch<unknown>(
     `/students/${params.studentId}/mastery-trend?${search.toString()}`,
+    { signal: options.signal },
   );
 
   return normalizeTrendResponse(payload);
 }
 
+export function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+export function isUnauthorizedError(error: unknown): error is ApiUnauthorizedError {
+  return error instanceof ApiUnauthorizedError;
+}
+
 export function getReadableErrorMessage(error: unknown, fallback: string): string {
+  if (isUnauthorizedError(error)) {
+    return 'Session expired. Please login again.';
+  }
+
   if (error instanceof Error) {
     return toErrorMessage(error.message, fallback);
   }

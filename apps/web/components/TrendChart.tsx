@@ -14,6 +14,7 @@ import type { TrendBucket } from '../types/api';
 
 type TrendChartProps = {
   buckets: TrendBucket[];
+  title?: string;
 };
 
 function formatPercent(value: number): string {
@@ -33,11 +34,11 @@ function normalizeToNumber(value: unknown): number {
   return 0;
 }
 
-export function TrendChart({ buckets }: TrendChartProps) {
+export function TrendChart({ buckets, title = 'Mastery trend' }: TrendChartProps) {
   if (buckets.length === 0) {
     return (
       <section className="card">
-        <h2 className="cardTitle">Mastery trend</h2>
+        <h2 className="cardTitle">{title}</h2>
         <p className="muted">No trend data available for this range.</p>
       </section>
     );
@@ -45,7 +46,7 @@ export function TrendChart({ buckets }: TrendChartProps) {
 
   return (
     <section className="card">
-      <h2 className="cardTitle">Mastery trend</h2>
+      <h2 className="cardTitle">{title}</h2>
       <div className="chartContainer">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={buckets} margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
