@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 
+import { RequireAuth } from '../../components/RequireAuth';
 import { getReadableErrorMessage, isAbortError, listAttempts } from '../../lib/api';
 import { useRequireAuth } from '../../lib/useAuth';
 import type { AttemptListItem } from '../../types/api';
@@ -35,7 +36,7 @@ function formatDate(value: string | null | undefined): string {
 }
 
 export default function AttemptsPage() {
-  const { isAuthenticated, isChecking } = useRequireAuth();
+  const { isAuthenticated } = useRequireAuth();
 
   const [attempts, setAttempts] = useState<AttemptListItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -151,152 +152,144 @@ export default function AttemptsPage() {
     }
   }, [activeFilters, isLoadingMore, loadAttempts, nextCursor]);
 
-  if (isChecking || !isAuthenticated) {
-    return (
+  return (
+    <RequireAuth>
       <main className="page">
         <section className="panel">
-          <p className="muted">Checking session...</p>
+          <div className="headerRow">
+            <h1>Attempts</h1>
+            <button
+              className="buttonSecondary"
+              type="button"
+              onClick={() =>
+                void loadAttempts({
+                  targetFilters: activeFilters,
+                })
+              }
+              disabled={status === 'loading'}
+            >
+              Retry
+            </button>
+          </div>
+
+          <p className="muted">Recent attempts in your organization.</p>
+
+          <form className="stack" onSubmit={applyFilters}>
+            <div className="buttonRow">
+              <label className="field">
+                Student ID
+                <input
+                  type="text"
+                  value={filters.studentId}
+                  onChange={(event) =>
+                    setFilters((previous) => ({
+                      ...previous,
+                      studentId: event.target.value,
+                    }))
+                  }
+                  placeholder="cuid"
+                />
+              </label>
+              <label className="field">
+                Assignment ID
+                <input
+                  type="text"
+                  value={filters.assignmentId}
+                  onChange={(event) =>
+                    setFilters((previous) => ({
+                      ...previous,
+                      assignmentId: event.target.value,
+                    }))
+                  }
+                  placeholder="cuid"
+                />
+              </label>
+            </div>
+            <div className="buttonRow">
+              <button className="button" type="submit" disabled={status === 'loading'}>
+                Apply filters
+              </button>
+              <button className="buttonSecondary" type="button" onClick={resetFilters}>
+                Reset
+              </button>
+            </div>
+          </form>
+
+          {hasActiveFilters && (
+            <p className="muted">
+              Active filters: studentId=<code>{activeFilters.studentId || '—'}</code>, assignmentId=
+              <code>{activeFilters.assignmentId || '—'}</code>
+            </p>
+          )}
+
+          {status === 'loading' && <p className="muted">Loading attempts...</p>}
+
+          {status === 'error' && (
+            <section className="card">
+              <h2 className="cardTitle">Unable to load attempts</h2>
+              <p className="errorText">{errorMessage}</p>
+            </section>
+          )}
+
+          {status === 'ready' && (
+            <>
+              {attempts.length === 0 ? (
+                <section className="card">
+                  <h2 className="cardTitle">No attempts yet</h2>
+                  <p className="muted">Attempts will appear after students submit assignments.</p>
+                </section>
+              ) : (
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Attempt</th>
+                      <th>Status</th>
+                      <th>Student</th>
+                      <th>Assignment</th>
+                      <th>Started</th>
+                      <th>Submitted</th>
+                      <th>Total score</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attempts.map((attempt) => (
+                      <tr key={attempt.attemptId}>
+                        <td>
+                          <code>{attempt.attemptId}</code>
+                        </td>
+                        <td>{attempt.status}</td>
+                        <td>
+                          <code>{attempt.studentId}</code>
+                        </td>
+                        <td>
+                          <code>{attempt.assignmentId}</code>
+                        </td>
+                        <td>{formatDate(attempt.startedAt)}</td>
+                        <td>{formatDate(attempt.submittedAt)}</td>
+                        <td>{attempt.totalScore}</td>
+                        <td>
+                          <Link className="buttonLink" href={`/attempts/${attempt.attemptId}`}>
+                            Open
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {nextCursor && (
+                <div className="buttonRow">
+                  <button className="button" type="button" onClick={() => void loadMore()}>
+                    {isLoadingMore ? 'Loading...' : 'Load more'}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </section>
       </main>
-    );
-  }
-
-  return (
-    <main className="page">
-      <section className="panel">
-        <div className="headerRow">
-          <h1>Attempts</h1>
-          <button
-            className="buttonSecondary"
-            type="button"
-            onClick={() =>
-              void loadAttempts({
-                targetFilters: activeFilters,
-              })
-            }
-            disabled={status === 'loading'}
-          >
-            Retry
-          </button>
-        </div>
-
-        <p className="muted">Recent attempts in your organization.</p>
-
-        <form className="stack" onSubmit={applyFilters}>
-          <div className="buttonRow">
-            <label className="field">
-              Student ID
-              <input
-                type="text"
-                value={filters.studentId}
-                onChange={(event) =>
-                  setFilters((previous) => ({
-                    ...previous,
-                    studentId: event.target.value,
-                  }))
-                }
-                placeholder="cuid"
-              />
-            </label>
-            <label className="field">
-              Assignment ID
-              <input
-                type="text"
-                value={filters.assignmentId}
-                onChange={(event) =>
-                  setFilters((previous) => ({
-                    ...previous,
-                    assignmentId: event.target.value,
-                  }))
-                }
-                placeholder="cuid"
-              />
-            </label>
-          </div>
-          <div className="buttonRow">
-            <button className="button" type="submit" disabled={status === 'loading'}>
-              Apply filters
-            </button>
-            <button className="buttonSecondary" type="button" onClick={resetFilters}>
-              Reset
-            </button>
-          </div>
-        </form>
-
-        {hasActiveFilters && (
-          <p className="muted">
-            Active filters: studentId=<code>{activeFilters.studentId || '—'}</code>, assignmentId=
-            <code>{activeFilters.assignmentId || '—'}</code>
-          </p>
-        )}
-
-        {status === 'loading' && <p className="muted">Loading attempts...</p>}
-
-        {status === 'error' && (
-          <section className="card">
-            <h2 className="cardTitle">Unable to load attempts</h2>
-            <p className="errorText">{errorMessage}</p>
-          </section>
-        )}
-
-        {status === 'ready' && (
-          <>
-            {attempts.length === 0 ? (
-              <section className="card">
-                <h2 className="cardTitle">No attempts yet</h2>
-                <p className="muted">Attempts will appear after students submit assignments.</p>
-              </section>
-            ) : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Attempt</th>
-                    <th>Status</th>
-                    <th>Student</th>
-                    <th>Assignment</th>
-                    <th>Started</th>
-                    <th>Submitted</th>
-                    <th>Total score</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {attempts.map((attempt) => (
-                    <tr key={attempt.attemptId}>
-                      <td>
-                        <code>{attempt.attemptId}</code>
-                      </td>
-                      <td>{attempt.status}</td>
-                      <td>
-                        <code>{attempt.studentId}</code>
-                      </td>
-                      <td>
-                        <code>{attempt.assignmentId}</code>
-                      </td>
-                      <td>{formatDate(attempt.startedAt)}</td>
-                      <td>{formatDate(attempt.submittedAt)}</td>
-                      <td>{attempt.totalScore}</td>
-                      <td>
-                        <Link className="buttonLink" href={`/attempts/${attempt.attemptId}`}>
-                          Open
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-
-            {nextCursor && (
-              <div className="buttonRow">
-                <button className="button" type="button" onClick={() => void loadMore()}>
-                  {isLoadingMore ? 'Loading...' : 'Load more'}
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </section>
-    </main>
+    </RequireAuth>
   );
 }

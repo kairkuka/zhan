@@ -2,6 +2,15 @@ export type Student = {
   id: string;
 };
 
+export type AuthRole = 'ADMIN' | 'TEACHER' | 'PARENT' | 'STUDENT';
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  role: AuthRole;
+  organizationId: string;
+};
+
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'UNKNOWN';
 export type TrendDirection = 'UP' | 'DOWN' | 'FLAT' | 'INSUFFICIENT_DATA';
 

@@ -1,4 +1,6 @@
 import type {
+  AuthRole,
+  AuthUser,
   AttemptDetail,
   AttemptListItem,
   AttemptStatus,
@@ -18,9 +20,13 @@ import type {
   TrendBucket,
   TrendDirection,
 } from '../types/api';
+import {
+  clearSessionToken,
+  getSessionToken,
+  setSessionToken,
+} from './authSession';
 
 const API_URL = 'http://localhost:4000';
-const TOKEN_STORAGE_KEY = 'jwt';
 
 export class ApiUnauthorizedError extends Error {
   readonly status = 401;
@@ -50,6 +56,8 @@ type LoginResponse = {
   token: string;
 };
 
+type UnauthorizedHandler = () => void;
+
 type OverviewCacheEntry = {
   value: MasteryOverview;
   expiresAt: number;
@@ -66,6 +74,10 @@ const overviewInFlight = new Map<string, Promise<MasteryOverview>>();
 const RISK_LEVELS = new Set<RiskLevel>(['LOW', 'MEDIUM', 'HIGH', 'UNKNOWN']);
 const TREND_DIRECTIONS = new Set<TrendDirection>(['UP', 'DOWN', 'FLAT', 'INSUFFICIENT_DATA']);
 const ATTEMPT_STATUS = new Set<AttemptStatus>(['IN_PROGRESS', 'SUBMITTED']);
+const AUTH_ROLES = new Set<AuthRole>(['ADMIN', 'TEACHER', 'PARENT', 'STUDENT']);
+
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+let isUnauthorizedHandled = false;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -118,6 +130,27 @@ function parseTrendDirection(value: unknown): TrendDirection | undefined {
   return TREND_DIRECTIONS.has(normalized as TrendDirection)
     ? (normalized as TrendDirection)
     : undefined;
+}
+
+function parseAuthRole(value: unknown): AuthRole {
+  if (typeof value !== 'string' || !AUTH_ROLES.has(value as AuthRole)) {
+    throw new Error('Invalid auth role');
+  }
+
+  return value as AuthRole;
+}
+
+function parseAuthUser(payload: unknown): AuthUser {
+  if (!isRecord(payload)) {
+    throw new Error('Invalid session response');
+  }
+
+  return {
+    id: requireString(payload.id, 'auth.id'),
+    email: requireString(payload.email, 'auth.email'),
+    role: parseAuthRole(payload.role),
+    organizationId: requireString(payload.organizationId, 'auth.organizationId'),
+  };
 }
 
 function requireString(value: unknown, fieldName: string): string {
@@ -546,11 +579,42 @@ function handleUnauthorized(): void {
     return;
   }
 
+  if (isUnauthorizedHandled) {
+    return;
+  }
+
+  isUnauthorizedHandled = true;
+
   logout();
+
+  if (unauthorizedHandler) {
+    unauthorizedHandler();
+    return;
+  }
 
   if (window.location.pathname !== '/login') {
     window.location.replace('/login');
   }
+}
+
+function markUnauthorizedCycleResolved(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.setTimeout(() => {
+    isUnauthorizedHandled = false;
+  }, 0);
+}
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): () => void {
+  unauthorizedHandler = handler;
+
+  return () => {
+    if (unauthorizedHandler === handler) {
+      unauthorizedHandler = null;
+    }
+  };
 }
 
 function getCachedOverview(studentId: string): MasteryOverview | undefined {
@@ -575,27 +639,20 @@ function setCachedOverview(studentId: string, value: MasteryOverview): void {
 }
 
 export function getToken(): string | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  return window.localStorage.getItem(TOKEN_STORAGE_KEY);
+  return getSessionToken();
 }
 
 export function setToken(token: string): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  setSessionToken(token);
 }
 
 export function logout(): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
+  clearSessionToken();
+}
 
-  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+export async function getSessionUser(options: { signal?: AbortSignal } = {}): Promise<AuthUser> {
+  const payload = await apiFetch<unknown>('/me', { signal: options.signal });
+  return parseAuthUser(payload);
 }
 
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
@@ -632,6 +689,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   if (!response.ok) {
     if (auth && response.status === 401) {
       handleUnauthorized();
+      markUnauthorizedCycleResolved();
       throw new ApiUnauthorizedError('Session expired. Please login again.');
     }
 

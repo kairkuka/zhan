@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { OverviewCard, type OverviewMetric } from '../../../components/OverviewCard';
+import { RequireAuth } from '../../../components/RequireAuth';
 import { TrendChart } from '../../../components/TrendChart';
 import {
   getReadableErrorMessage,
@@ -45,7 +46,7 @@ export default function StudentAnalyticsPage() {
   const params = useParams<{ id: string }>();
   const studentId = useMemo(() => params.id ?? '', [params.id]);
 
-  const { isAuthenticated, isChecking } = useRequireAuth();
+  const { isAuthenticated } = useRequireAuth();
 
   const [overview, setOverview] = useState<MasteryOverview | null>(null);
   const [isOverviewLoading, setIsOverviewLoading] = useState(true);
@@ -231,137 +232,129 @@ export default function StudentAnalyticsPage() {
     [overview],
   );
 
-  if (isChecking || !isAuthenticated) {
-    return (
+  return (
+    <RequireAuth>
       <main className="page">
         <section className="panel">
-          <p className="muted">Checking session...</p>
-        </section>
-      </main>
-    );
-  }
-
-  return (
-    <main className="page">
-      <section className="panel">
-        <div className="headerRow">
-          <h1>Student analytics</h1>
-          <div className="buttonRow">
-            <Link className="buttonSecondary" href="/students">
-              Back to students
-            </Link>
-            <button className="buttonSecondary" type="button" onClick={() => void loadInitialData()}>
-              Refresh
-            </button>
-          </div>
-        </div>
-
-        <p className="muted">
-          Student ID: <code>{studentId}</code>
-        </p>
-
-        <OverviewCard title="Mastery overview" metrics={overviewMetrics} />
-        {isOverviewLoading && <p className="muted">Loading mastery overview...</p>}
-        {!isOverviewLoading && overviewError && <p className="errorText">{overviewError}</p>}
-
-        {isTrendLoading ? (
-          <section className="card">
-            <h2 className="cardTitle">Mastery trend</h2>
-            <p className="muted">Loading mastery trend...</p>
-          </section>
-        ) : trendError ? (
-          <section className="card">
-            <h2 className="cardTitle">Mastery trend</h2>
-            <p className="errorText">{trendError}</p>
-          </section>
-        ) : (
-          <TrendChart buckets={trendBuckets} title="Weekly mastery trend" />
-        )}
-
-        {!isTrendLoading && !trendError && trendNextCursor && (
-          <div className="buttonRow">
-            <button className="button" type="button" onClick={() => void handleLoadMoreTrend()}>
-              {isTrendLoadingMore ? 'Loading...' : 'Load more trend'}
-            </button>
-          </div>
-        )}
-
-        <section className="card">
-          <h2 className="cardTitle">Snapshots timeline</h2>
-
-          {isSnapshotsLoading && <p className="muted">Loading snapshots...</p>}
-          {!isSnapshotsLoading && snapshotError && <p className="errorText">{snapshotError}</p>}
-
-          {!isSnapshotsLoading && !snapshotError && snapshots.length === 0 && (
-            <p className="muted">No snapshots available for this student yet.</p>
-          )}
-
-          {!isSnapshotsLoading && !snapshotError && snapshots.length > 0 && (
-            <ul className="listMuted">
-              {snapshots.map((snapshot) => (
-                <li key={snapshot.id}>
-                  {formatDate(snapshot.createdAt)} - mastery {formatMastery(snapshot.averageMastery)} - risk{' '}
-                  {snapshot.riskLevel}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {!isSnapshotsLoading && !snapshotError && snapshotNextCursor && (
+          <div className="headerRow">
+            <h1>Student analytics</h1>
             <div className="buttonRow">
-              <button
-                className="button"
-                type="button"
-                onClick={() => void handleLoadMoreSnapshots()}
-              >
-                {isSnapshotsLoadingMore ? 'Loading...' : 'Load more snapshots'}
+              <Link className="buttonSecondary" href="/students">
+                Back to students
+              </Link>
+              <button className="buttonSecondary" type="button" onClick={() => void loadInitialData()}>
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <p className="muted">
+            Student ID: <code>{studentId}</code>
+          </p>
+
+          <OverviewCard title="Mastery overview" metrics={overviewMetrics} />
+          {isOverviewLoading && <p className="muted">Loading mastery overview...</p>}
+          {!isOverviewLoading && overviewError && <p className="errorText">{overviewError}</p>}
+
+          {isTrendLoading ? (
+            <section className="card">
+              <h2 className="cardTitle">Mastery trend</h2>
+              <p className="muted">Loading mastery trend...</p>
+            </section>
+          ) : trendError ? (
+            <section className="card">
+              <h2 className="cardTitle">Mastery trend</h2>
+              <p className="errorText">{trendError}</p>
+            </section>
+          ) : (
+            <TrendChart buckets={trendBuckets} title="Weekly mastery trend" />
+          )}
+
+          {!isTrendLoading && !trendError && trendNextCursor && (
+            <div className="buttonRow">
+              <button className="button" type="button" onClick={() => void handleLoadMoreTrend()}>
+                {isTrendLoadingMore ? 'Loading...' : 'Load more trend'}
               </button>
             </div>
           )}
+
+          <section className="card">
+            <h2 className="cardTitle">Snapshots timeline</h2>
+
+            {isSnapshotsLoading && <p className="muted">Loading snapshots...</p>}
+            {!isSnapshotsLoading && snapshotError && <p className="errorText">{snapshotError}</p>}
+
+            {!isSnapshotsLoading && !snapshotError && snapshots.length === 0 && (
+              <p className="muted">No snapshots available for this student yet.</p>
+            )}
+
+            {!isSnapshotsLoading && !snapshotError && snapshots.length > 0 && (
+              <ul className="listMuted">
+                {snapshots.map((snapshot) => (
+                  <li key={snapshot.id}>
+                    {formatDate(snapshot.createdAt)} - mastery {formatMastery(snapshot.averageMastery)} - risk{' '}
+                    {snapshot.riskLevel}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {!isSnapshotsLoading && !snapshotError && snapshotNextCursor && (
+              <div className="buttonRow">
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => void handleLoadMoreSnapshots()}
+                >
+                  {isSnapshotsLoadingMore ? 'Loading...' : 'Load more snapshots'}
+                </button>
+              </div>
+            )}
+          </section>
+
+          <section className="card">
+            <h2 className="cardTitle">Projection summary</h2>
+
+            {isProjectionLoading && <p className="muted">Loading projection summary...</p>}
+
+            {!isProjectionLoading && projection && (
+              <dl className="statsGrid">
+                <div className="statItem">
+                  <dt>Skills tracked</dt>
+                  <dd>{projection.skillsTracked}</dd>
+                </div>
+                <div className="statItem">
+                  <dt>Average mastery</dt>
+                  <dd>{formatMastery(projection.averageMastery)}</dd>
+                </div>
+                <div className="statItem">
+                  <dt>Risk level</dt>
+                  <dd>{projection.riskLevel}</dd>
+                </div>
+                <div className="statItem">
+                  <dt>High risk skills</dt>
+                  <dd>{projection.highRiskSkills}</dd>
+                </div>
+                <div className="statItem">
+                  <dt>Medium risk skills</dt>
+                  <dd>{projection.mediumRiskSkills}</dd>
+                </div>
+                <div className="statItem">
+                  <dt>Low risk skills</dt>
+                  <dd>{projection.lowRiskSkills}</dd>
+                </div>
+              </dl>
+            )}
+
+            {!isProjectionLoading && !projection && (
+              <p className="muted">
+                Projection is unavailable right now.
+                {projectionError ? ` ${projectionError}` : ''}
+              </p>
+            )}
+          </section>
         </section>
-
-        <section className="card">
-          <h2 className="cardTitle">Projection summary</h2>
-
-          {isProjectionLoading && <p className="muted">Loading projection summary...</p>}
-
-          {!isProjectionLoading && projection && (
-            <dl className="statsGrid">
-              <div className="statItem">
-                <dt>Skills tracked</dt>
-                <dd>{projection.skillsTracked}</dd>
-              </div>
-              <div className="statItem">
-                <dt>Average mastery</dt>
-                <dd>{formatMastery(projection.averageMastery)}</dd>
-              </div>
-              <div className="statItem">
-                <dt>Risk level</dt>
-                <dd>{projection.riskLevel}</dd>
-              </div>
-              <div className="statItem">
-                <dt>High risk skills</dt>
-                <dd>{projection.highRiskSkills}</dd>
-              </div>
-              <div className="statItem">
-                <dt>Medium risk skills</dt>
-                <dd>{projection.mediumRiskSkills}</dd>
-              </div>
-              <div className="statItem">
-                <dt>Low risk skills</dt>
-                <dd>{projection.lowRiskSkills}</dd>
-              </div>
-            </dl>
-          )}
-
-          {!isProjectionLoading && !projection && (
-            <p className="muted">
-              Projection is unavailable right now.
-              {projectionError ? ` ${projectionError}` : ''}
-            </p>
-          )}
-        </section>
-      </section>
-    </main>
+      </main>
+    </RequireAuth>
   );
 }

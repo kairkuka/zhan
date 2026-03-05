@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+import { apiFetch, getToken, getReadableErrorMessage } from '../../../lib/api';
+
 type OrgUser = {
   id: string;
   email: string;
@@ -14,15 +16,12 @@ type AdminUsersResponse = {
   users: OrgUser[];
 };
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-const tokenStorageKey = 'skyvern.token';
-
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<OrgUser[]>([]);
   const [message, setMessage] = useState('');
 
   async function loadUsers() {
-    const token = window.localStorage.getItem(tokenStorageKey);
+    const token = getToken();
 
     if (!token) {
       setMessage('No token found. Login first at /login.');
@@ -31,23 +30,14 @@ export default function AdminUsersPage() {
     }
 
     try {
-      const response = await fetch(`${apiBaseUrl}/admin/org/users`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const payload = await apiFetch<AdminUsersResponse>('/admin/org/users', {
+        method: 'GET',
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const payload = (await response.json()) as AdminUsersResponse;
       setUsers(payload.users);
       setMessage(`Loaded ${payload.users.length} users.`);
     } catch (error) {
-      const details = error instanceof Error ? error.message : 'Unknown error';
       setUsers([]);
-      setMessage(`Failed to load users: ${details}`);
+      setMessage(getReadableErrorMessage(error, 'Failed to load users.'));
     }
   }
 

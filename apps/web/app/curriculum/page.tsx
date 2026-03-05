@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
+import { RequireAuth } from '../../components/RequireAuth';
 import { getReadableErrorMessage, isAbortError, listCurriculum } from '../../lib/api';
 import { useRequireAuth } from '../../lib/useAuth';
 import type { CurriculumListItem } from '../../types/api';
@@ -21,7 +22,7 @@ function formatDate(value: string): string {
 }
 
 export default function CurriculumPage() {
-  const { isAuthenticated, isChecking } = useRequireAuth();
+  const { isAuthenticated } = useRequireAuth();
 
   const [items, setItems] = useState<CurriculumListItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -92,86 +93,78 @@ export default function CurriculumPage() {
     }
   }, [isLoadingMore, nextCursor]);
 
-  if (isChecking || !isAuthenticated) {
-    return (
+  return (
+    <RequireAuth>
       <main className="page">
         <section className="panel">
-          <p className="muted">Checking session...</p>
+          <div className="headerRow">
+            <h1>Curriculum</h1>
+            <button
+              className="buttonSecondary"
+              type="button"
+              onClick={() => void loadInitial()}
+              disabled={status === 'loading'}
+            >
+              Retry
+            </button>
+          </div>
+
+          <p className="muted">Subjects in the current organization with unit counts.</p>
+
+          {status === 'loading' && <p className="muted">Loading curriculum...</p>}
+
+          {status === 'error' && (
+            <section className="card">
+              <h2 className="cardTitle">Unable to load curriculum</h2>
+              <p className="errorText">{errorMessage}</p>
+            </section>
+          )}
+
+          {status === 'ready' && (
+            <>
+              {items.length === 0 ? (
+                <section className="card">
+                  <h2 className="cardTitle">No curriculum yet</h2>
+                  <p className="muted">Create subjects in the API to see curriculum here.</p>
+                </section>
+              ) : (
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Units</th>
+                      <th>Created</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item) => (
+                      <tr key={item.id}>
+                        <td>{item.name}</td>
+                        <td>{item.unitsCount}</td>
+                        <td>{formatDate(item.createdAt)}</td>
+                        <td>
+                          <Link className="buttonLink" href={`/curriculum/${item.id}`}>
+                            Open
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {nextCursor && (
+                <div className="buttonRow">
+                  <button className="button" type="button" onClick={() => void loadMore()}>
+                    {isLoadingMore ? 'Loading...' : 'Load more'}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </section>
       </main>
-    );
-  }
-
-  return (
-    <main className="page">
-      <section className="panel">
-        <div className="headerRow">
-          <h1>Curriculum</h1>
-          <button
-            className="buttonSecondary"
-            type="button"
-            onClick={() => void loadInitial()}
-            disabled={status === 'loading'}
-          >
-            Retry
-          </button>
-        </div>
-
-        <p className="muted">Subjects in the current organization with unit counts.</p>
-
-        {status === 'loading' && <p className="muted">Loading curriculum...</p>}
-
-        {status === 'error' && (
-          <section className="card">
-            <h2 className="cardTitle">Unable to load curriculum</h2>
-            <p className="errorText">{errorMessage}</p>
-          </section>
-        )}
-
-        {status === 'ready' && (
-          <>
-            {items.length === 0 ? (
-              <section className="card">
-                <h2 className="cardTitle">No curriculum yet</h2>
-                <p className="muted">Create subjects in the API to see curriculum here.</p>
-              </section>
-            ) : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Units</th>
-                    <th>Created</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.name}</td>
-                      <td>{item.unitsCount}</td>
-                      <td>{formatDate(item.createdAt)}</td>
-                      <td>
-                        <Link className="buttonLink" href={`/curriculum/${item.id}`}>
-                          Open
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-
-            {nextCursor && (
-              <div className="buttonRow">
-                <button className="button" type="button" onClick={() => void loadMore()}>
-                  {isLoadingMore ? 'Loading...' : 'Load more'}
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </section>
-    </main>
+    </RequireAuth>
   );
 }

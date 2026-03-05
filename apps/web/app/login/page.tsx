@@ -5,20 +5,22 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 
-import { getReadableErrorMessage, getToken, login, setToken } from '../../lib/api';
+import { getReadableErrorMessage, login as loginRequest } from '../../lib/api';
+import { useAuth } from '../../lib/useAuth';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { status, login } = useAuth();
   const [email, setEmail] = useState('admin@demo.local');
   const [password, setPassword] = useState('demo12345');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (getToken()) {
+    if (status === 'authed') {
       router.replace('/dashboard');
     }
-  }, [router]);
+  }, [router, status]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -26,13 +28,24 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      const token = await login(email.trim(), password);
-      setToken(token);
+      const token = await loginRequest(email.trim(), password);
+      login(token);
       router.replace('/dashboard');
     } catch (error) {
       setErrorMessage(getReadableErrorMessage(error, 'Login failed.'));
+    } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (status === 'unknown') {
+    return (
+      <main className="page">
+        <section className="panel">
+          <p className="muted">Checking session...</p>
+        </section>
+      </main>
+    );
   }
 
   return (
