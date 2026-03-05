@@ -2,16 +2,20 @@ export type Student = {
   id: string;
 };
 
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'UNKNOWN';
+export type TrendDirection = 'UP' | 'DOWN' | 'FLAT' | 'INSUFFICIENT_DATA';
+
 export type MasterySkill = {
   skillId?: string;
   currentMastery: number;
-  risk?: string;
+  risk?: RiskLevel;
+  trend?: TrendDirection;
 };
 
 export type MasteryOverview = {
   averageMastery: number;
   skillsTracked: number;
-  riskLevel?: string;
+  riskLevel?: RiskLevel;
   skills?: MasterySkill[];
 };
 

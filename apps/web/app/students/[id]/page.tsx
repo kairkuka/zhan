@@ -19,7 +19,7 @@ export default function StudentAnalyticsPage() {
   const params = useParams<{ id: string }>();
   const studentId = useMemo(() => params.id ?? '', [params.id]);
 
-  const isAuthenticated = useRequireAuth();
+  const { isAuthenticated, isChecking } = useRequireAuth();
   const [overview, setOverview] = useState<MasteryOverview | null>(null);
   const [trendBuckets, setTrendBuckets] = useState<TrendBucket[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -106,7 +106,7 @@ export default function StudentAnalyticsPage() {
     }
   }, [isLoadingMore, nextCursor, studentId]);
 
-  if (!isAuthenticated) {
+  if (isChecking || !isAuthenticated) {
     return (
       <main className="page">
         <section className="panel">

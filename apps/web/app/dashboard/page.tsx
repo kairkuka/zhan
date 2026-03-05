@@ -25,7 +25,7 @@ function LoadingSkeleton() {
 }
 
 export default function DashboardPage() {
-  const isAuthenticated = useRequireAuth();
+  const { isAuthenticated, isChecking } = useRequireAuth();
   const { state, reload } = useDashboardData({
     sampleSize: 10,
     enabled: isAuthenticated,
@@ -59,7 +59,7 @@ export default function DashboardPage() {
     ];
   }, [state]);
 
-  if (!isAuthenticated) {
+  if (isChecking || !isAuthenticated) {
     return (
       <main className="page">
         <section className="panel">

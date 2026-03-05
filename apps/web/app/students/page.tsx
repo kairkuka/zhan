@@ -10,7 +10,7 @@ import type { Student } from '../../types/api';
 type PageState = 'loading' | 'ready' | 'error';
 
 export default function StudentsPage() {
-  const isAuthenticated = useRequireAuth();
+  const { isAuthenticated, isChecking } = useRequireAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [state, setState] = useState<PageState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -51,7 +51,7 @@ export default function StudentsPage() {
     };
   }, [isAuthenticated, loadStudents]);
 
-  if (!isAuthenticated) {
+  if (isChecking || !isAuthenticated) {
     return (
       <main className="page">
         <section className="panel">

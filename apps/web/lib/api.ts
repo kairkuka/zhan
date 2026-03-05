@@ -1,8 +1,10 @@
 import type {
   MasteryOverview,
   MasterySkill,
+  RiskLevel,
   MasteryTrendResponse,
   Student,
+  TrendDirection,
   TrendBucket,
 } from '../types/api';
 
@@ -29,12 +31,24 @@ type StudentLike = {
 type OverviewSkillLike = {
   skillId?: string;
   currentMastery: number;
-  risk?: string;
+  risk?: RiskLevel;
+  trend?: TrendDirection;
 };
 
 type LoginResponse = {
   token: string;
 };
+
+type OverviewCacheEntry = {
+  value: MasteryOverview;
+  expiresAt: number;
+};
+
+const OVERVIEW_CACHE_TTL_MS = 60_000;
+const overviewCache = new Map<string, OverviewCacheEntry>();
+const overviewInFlight = new Map<string, Promise<MasteryOverview>>();
+const RISK_LEVELS = new Set<RiskLevel>(['LOW', 'MEDIUM', 'HIGH', 'UNKNOWN']);
+const TREND_DIRECTIONS = new Set<TrendDirection>(['UP', 'DOWN', 'FLAT', 'INSUFFICIENT_DATA']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -67,6 +81,26 @@ function parseApiError(payload: unknown, status: number): string {
   }
 
   return `API ${status}: request failed`;
+}
+
+function parseRiskLevel(value: unknown): RiskLevel | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.toUpperCase();
+  return RISK_LEVELS.has(normalized as RiskLevel) ? (normalized as RiskLevel) : undefined;
+}
+
+function parseTrendDirection(value: unknown): TrendDirection | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.toUpperCase();
+  return TREND_DIRECTIONS.has(normalized as TrendDirection)
+    ? (normalized as TrendDirection)
+    : undefined;
 }
 
 function normalizeBuckets(raw: unknown): TrendBucket[] {
@@ -132,7 +166,8 @@ function normalizeOverviewSkills(raw: unknown): MasterySkill[] {
     const parsedSkill: OverviewSkillLike = {
       currentMastery: item.currentMastery,
       skillId: typeof item.skillId === 'string' ? item.skillId : undefined,
-      risk: typeof item.risk === 'string' ? item.risk : undefined,
+      risk: parseRiskLevel(item.risk),
+      trend: parseTrendDirection(item.trend),
     };
 
     skills.push(parsedSkill);
@@ -154,7 +189,7 @@ function normalizeOverview(payload: unknown): MasteryOverview {
     return {
       averageMastery,
       skillsTracked,
-      riskLevel: typeof riskLevel === 'string' ? riskLevel : undefined,
+      riskLevel: parseRiskLevel(riskLevel),
       skills: normalizeOverviewSkills(payload.skills),
     };
   }
@@ -173,7 +208,7 @@ function normalizeOverview(payload: unknown): MasteryOverview {
     ['LOW', 1],
   ]);
 
-  let currentRisk: string | undefined;
+  let currentRisk: RiskLevel | undefined;
   let currentPriority = 0;
   for (const item of skills) {
     if (!item.risk) {
@@ -229,11 +264,36 @@ function buildApiUrl(path: string): string {
 }
 
 function handleUnauthorized(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
   logout();
 
-  if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+  if (window.location.pathname !== '/login') {
     window.location.replace('/login');
   }
+}
+
+function getCachedOverview(studentId: string): MasteryOverview | undefined {
+  const cacheEntry = overviewCache.get(studentId);
+  if (!cacheEntry) {
+    return undefined;
+  }
+
+  if (cacheEntry.expiresAt <= Date.now()) {
+    overviewCache.delete(studentId);
+    return undefined;
+  }
+
+  return cacheEntry.value;
+}
+
+function setCachedOverview(studentId: string, value: MasteryOverview): void {
+  overviewCache.set(studentId, {
+    value,
+    expiresAt: Date.now() + OVERVIEW_CACHE_TTL_MS,
+  });
 }
 
 export function getToken(): string | null {
@@ -326,11 +386,43 @@ export async function getStudentMasteryOverview(
   studentId: string,
   options: { signal?: AbortSignal } = {},
 ): Promise<MasteryOverview> {
-  const payload = await apiFetch<unknown>(`/students/${studentId}/mastery-overview`, {
-    signal: options.signal,
-  });
+  const { signal } = options;
 
-  return normalizeOverview(payload);
+  const cachedOverview = getCachedOverview(studentId);
+  if (cachedOverview) {
+    return cachedOverview;
+  }
+
+  if (!signal) {
+    const inFlightRequest = overviewInFlight.get(studentId);
+    if (inFlightRequest) {
+      return inFlightRequest;
+    }
+  }
+
+  const request = (async () => {
+    const payload = await apiFetch<unknown>(`/students/${studentId}/mastery-overview`, {
+      signal,
+    });
+
+    const overview = normalizeOverview(payload);
+    if (!signal?.aborted) {
+      setCachedOverview(studentId, overview);
+    }
+
+    return overview;
+  })();
+
+  if (!signal) {
+    overviewInFlight.set(studentId, request);
+    try {
+      return await request;
+    } finally {
+      overviewInFlight.delete(studentId);
+    }
+  }
+
+  return request;
 }
 
 export async function getStudentMasteryTrend(

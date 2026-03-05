@@ -3,9 +3,9 @@
 import { useRequireAuth } from '../../lib/useAuth';
 
 export default function AttemptsPage() {
-  const isAuthenticated = useRequireAuth();
+  const { isAuthenticated, isChecking } = useRequireAuth();
 
-  if (!isAuthenticated) {
+  if (isChecking || !isAuthenticated) {
     return (
       <main className="page">
         <section className="panel">

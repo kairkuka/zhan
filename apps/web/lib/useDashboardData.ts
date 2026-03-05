@@ -33,10 +33,10 @@ type UseDashboardDataOptions = {
 
 function hasHighRisk(overview: MasteryOverview): boolean {
   if (Array.isArray(overview.skills) && overview.skills.length > 0) {
-    return overview.skills.some((skill) => (skill.risk ?? '').toUpperCase() === 'HIGH');
+    return overview.skills.some((skill) => skill.risk === 'HIGH');
   }
 
-  return (overview.riskLevel ?? '').toUpperCase() === 'HIGH';
+  return overview.riskLevel === 'HIGH';
 }
 
 function computeAverageMastery(overviews: MasteryOverview[]): number {
@@ -49,7 +49,7 @@ function computeAverageMastery(overviews: MasteryOverview[]): number {
 }
 
 export function useDashboardData(options: UseDashboardDataOptions = {}) {
-  const sampleSize = options.sampleSize ?? 10;
+  const sampleSize = Math.min(Math.max(options.sampleSize ?? 10, 1), 10);
   const enabled = options.enabled ?? true;
 
   const [state, setState] = useState<DashboardState>({ status: 'loading' });
@@ -109,6 +109,9 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
         );
 
         const [overviews, trend] = await Promise.all([overviewPromise, trendPromise]);
+        if (controller.signal.aborted) {
+          return;
+        }
 
         const studentsAtRisk = overviews.filter(hasHighRisk).length;
 
