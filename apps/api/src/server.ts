@@ -10,6 +10,7 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerCurriculumRoutes } from './routes/curriculum.js';
 import { registerMeRoutes } from './routes/me.js';
 import { registerQuestionRoutes } from './routes/questions.js';
+import { registerStudentRoutes } from './routes/students.js';
 import { registerJwt } from './plugins/jwt.js';
 
 export async function buildServer() {
@@ -36,6 +37,7 @@ export async function buildServer() {
   await registerAttemptRoutes(app);
   await registerQuestionRoutes(app);
   await registerCurriculumRoutes(app);
+  await registerStudentRoutes(app);
 
   return app;
 }
