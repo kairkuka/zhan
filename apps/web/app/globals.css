@@ -9,16 +9,176 @@
 
 body {
   margin: 0;
-  background: #f6f7fb;
+  background: #f3f4f6;
   color: #111827;
 }
 
-.container {
-  max-width: 720px;
-  margin: 3rem auto;
-  padding: 0 1rem;
+a {
+  color: #1d4ed8;
 }
 
+.page {
+  min-height: 100vh;
+  padding: 2.5rem 1rem;
+}
+
+.panel {
+  max-width: 920px;
+  margin: 0 auto;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.container {
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-width: 420px;
+}
+
+.field input {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.buttonRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.button,
+.buttonSecondary,
+.buttonLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.95rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button {
+  border: 1px solid #1d4ed8;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.buttonSecondary {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #111827;
+}
+
+.buttonLink {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #111827;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  padding: 0.75rem 0.6rem;
+  vertical-align: middle;
+}
+
+.table th {
+  color: #4b5563;
+  font-weight: 600;
+  background: #f9fafb;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1rem;
+  background: #ffffff;
+}
+
+.cardTitle {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.statItem {
+  padding: 0.65rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.statItem dt {
+  color: #4b5563;
+  font-size: 0.85rem;
+}
+
+.statItem dd {
+  margin: 0.2rem 0 0;
+  font-weight: 600;
+}
+
+.chartContainer {
+  height: 320px;
+}
+
+.muted {
+  color: #4b5563;
+}
+
+.errorText,
 .error {
   color: #b91c1c;
 }

@@ -63,7 +63,7 @@ export default function HomePage() {
         API target: <code>{apiBaseUrl}</code>
       </p>
       <p>
-        <Link href="/login">Go to login</Link> | <Link href="/admin/users">View admin users</Link>
+        <Link href="/login">Go to login</Link> | <Link href="/students">Open students</Link>
       </p>
 
       {health.status === 'loading' && <p>{health.message}</p>}
