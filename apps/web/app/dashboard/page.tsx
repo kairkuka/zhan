@@ -48,8 +48,11 @@ export default function DashboardPage() {
       },
       {
         title: 'Mastery KPI',
-        subtitle: 'Average of per-student mastery in sample',
-        metrics: [{ label: 'Average mastery', value: formatMastery(state.data.averageMastery) }],
+        subtitle: `Average from sampled students (${state.data.kpiSource})`,
+        metrics: [
+          { label: 'Average mastery', value: formatMastery(state.data.averageMastery) },
+          { label: 'KPI source', value: state.data.kpiSource },
+        ],
       },
       {
         title: 'Trend source',
@@ -99,6 +102,12 @@ export default function DashboardPage() {
 
         {state.status === 'ready' && (
           <div className="stack">
+            {state.data.kpiSource === 'overview' && (
+              <p className="muted">
+                Projection endpoints partially unavailable. KPIs fall back to mastery overview.
+              </p>
+            )}
+
             <div className="kpiGrid">
               {kpiCards.map((card) => (
                 <OverviewCard
@@ -110,17 +119,17 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {state.data.projection && (
+            {state.data.projectionSummary && (
               <section className="card">
                 <h2 className="cardTitle">Risk breakdown</h2>
                 <p className="muted">
-                  Projection from student <code>{state.data.projection.studentId}</code>
+                  Projection from student <code>{state.data.projectionSummary.studentId}</code>
                 </p>
                 <ul className="listMuted">
-                  <li>High risk skills: {state.data.projection.highRiskSkills}</li>
-                  <li>Medium risk skills: {state.data.projection.mediumRiskSkills}</li>
-                  <li>Low risk skills: {state.data.projection.lowRiskSkills}</li>
-                  <li>Projection risk level: {state.data.projection.riskLevel}</li>
+                  <li>High risk skills: {state.data.projectionSummary.highRiskSkills}</li>
+                  <li>Medium risk skills: {state.data.projectionSummary.mediumRiskSkills}</li>
+                  <li>Low risk skills: {state.data.projectionSummary.lowRiskSkills}</li>
+                  <li>Projection risk level: {state.data.projectionSummary.riskLevel}</li>
                 </ul>
               </section>
             )}

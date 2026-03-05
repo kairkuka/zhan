@@ -19,7 +19,8 @@ type DashboardData = {
   studentsAtRisk: number;
   trendStudentId: string;
   trendBuckets: TrendBucket[];
-  projection: StudentProjection | null;
+  projectionSummary: StudentProjection | null;
+  kpiSource: 'projection' | 'overview';
 };
 
 type DashboardState =
@@ -48,6 +49,15 @@ function computeAverageMastery(overviews: MasteryOverview[]): number {
 
   const total = overviews.reduce((sum, overview) => sum + overview.averageMastery, 0);
   return total / overviews.length;
+}
+
+function computeProjectionAverage(projections: StudentProjection[]): number {
+  if (projections.length === 0) {
+    return 0;
+  }
+
+  const total = projections.reduce((sum, projection) => sum + projection.averageMastery, 0);
+  return total / projections.length;
 }
 
 export function useDashboardData(options: UseDashboardDataOptions = {}) {
@@ -110,32 +120,55 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
           },
         );
 
-        const projectionPromise = getStudentProjection(trendStudent.id, {
-          signal: controller.signal,
-        }).catch(() => null);
+        const projectionsPromise = Promise.allSettled(
+          sampledStudents.map((student) =>
+            getStudentProjection(student.id, {
+              signal: controller.signal,
+            }),
+          ),
+        );
 
-        const [overviews, trend, projection] = await Promise.all([
+        const [overviews, trend, projectionResults] = await Promise.all([
           overviewPromise,
           trendPromise,
-          projectionPromise,
+          projectionsPromise,
         ]);
 
         if (controller.signal.aborted) {
           return;
         }
 
-        const studentsAtRisk = overviews.filter(hasHighRisk).length;
+        const successfulProjections = projectionResults
+          .filter((result): result is PromiseFulfilledResult<StudentProjection> => result.status === 'fulfilled')
+          .map((result) => result.value);
+
+        const useProjectionKpis = successfulProjections.length === sampledStudents.length;
+
+        const studentsAtRisk = useProjectionKpis
+          ? successfulProjections.filter((projection) => projection.riskLevel === 'HIGH').length
+          : overviews.filter(hasHighRisk).length;
+
+        const averageMastery = useProjectionKpis
+          ? computeProjectionAverage(successfulProjections)
+          : computeAverageMastery(overviews);
+
+        const firstProjectionResult = projectionResults[0];
+        const projectionSummary =
+          firstProjectionResult && firstProjectionResult.status === 'fulfilled'
+            ? firstProjectionResult.value
+            : null;
 
         setState({
           status: 'ready',
           data: {
             totalStudents: students.length,
             sampledStudents: sampledStudents.length,
-            averageMastery: computeAverageMastery(overviews),
+            averageMastery,
             studentsAtRisk,
             trendStudentId: trendStudent.id,
             trendBuckets: trend.buckets,
-            projection,
+            projectionSummary,
+            kpiSource: useProjectionKpis ? 'projection' : 'overview',
           },
         });
       } catch (error) {

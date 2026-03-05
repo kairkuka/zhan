@@ -123,45 +123,50 @@ export default function CurriculumDetailPage() {
               <p className="muted">Units: {curriculum.units.length}</p>
             </section>
 
-            {curriculum.units.map((unit) => (
-              <section className="card" key={unit.id}>
-                <h2 className="cardTitle">
-                  Unit {unit.order}: {unit.name}
-                </h2>
-
-                {unit.topics.length === 0 ? (
-                  <p className="muted">No topics.</p>
-                ) : (
-                  <div className="stack">
-                    {unit.topics.map((topic) => (
-                      <section key={topic.id} className="card">
-                        <h3>
-                          Topic {topic.order}: {topic.name}
-                        </h3>
-                        {topic.skills.length === 0 ? (
-                          <p className="muted">No skills.</p>
-                        ) : (
-                          <ul className="listMuted">
-                            {topic.skills.map((skill) => (
-                              <li key={skill.id}>
-                                {skill.name} (<code>{skill.id}</code>)
-                                {skill.questionTags.length > 0 && (
-                                  <>
-                                    {' '}
-                                    — tags:{' '}
-                                    {skill.questionTags.map((tag) => tag.questionId).join(', ')}
-                                  </>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </section>
-                    ))}
-                  </div>
-                )}
+            {curriculum.units.length === 0 ? (
+              <section className="card">
+                <h2 className="cardTitle">No units</h2>
+                <p className="muted">This subject has no units yet.</p>
               </section>
-            ))}
+            ) : (
+              <section className="card">
+                <h2 className="cardTitle">Units, topics and skills</h2>
+                <div className="stack">
+                  {curriculum.units.map((unit) => (
+                    <details key={unit.id} open>
+                      <summary>
+                        Unit {unit.order}: {unit.name} ({unit.topics.length} topics)
+                      </summary>
+
+                      {unit.topics.length === 0 ? (
+                        <p className="muted">No topics.</p>
+                      ) : (
+                        <div className="stack">
+                          {unit.topics.map((topic) => (
+                            <details key={topic.id}>
+                              <summary>
+                                Topic {topic.order}: {topic.name} ({topic.skills.length} skills)
+                              </summary>
+                              {topic.skills.length === 0 ? (
+                                <p className="muted">No skills.</p>
+                              ) : (
+                                <ul className="listMuted">
+                                  {topic.skills.map((skill) => (
+                                    <li key={skill.id}>
+                                      {skill.name} - question tags: {skill.questionTags.length}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </details>
+                          ))}
+                        </div>
+                      )}
+                    </details>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
       </section>

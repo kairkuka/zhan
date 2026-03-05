@@ -55,7 +55,7 @@ type OverviewCacheEntry = {
   expiresAt: number;
 };
 
-type PagedItems<T> = {
+type Paged<T> = {
   items: T[];
   nextCursor: string | null;
 };
@@ -146,6 +146,30 @@ function optionalStringOrNull(value: unknown): string | null {
   }
 
   throw new Error('Invalid optional string field');
+}
+
+function optionalString(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.length > 0) {
+    return value;
+  }
+
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  throw new Error('Invalid optional string field');
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && !Number.isNaN(value)) {
+    return value;
+  }
+
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  throw new Error('Invalid optional number field');
 }
 
 function parseStatus(value: unknown): AttemptStatus {
@@ -254,27 +278,29 @@ function parseAttemptDetail(payload: unknown): AttemptDetail {
     throw new Error('Invalid attempt detail response');
   }
 
-  const questionAttemptsRaw = payload.questionAttempts;
-  if (!Array.isArray(questionAttemptsRaw)) {
-    throw new Error('Invalid attempt detail questionAttempts');
-  }
+  const questionAttemptsRaw = Array.isArray(payload.questionAttempts) ? payload.questionAttempts : [];
 
   return {
     attemptId: requireString(payload.attemptId, 'attempt.attemptId'),
-    assignmentId: requireString(payload.assignmentId, 'attempt.assignmentId'),
-    studentId: requireString(payload.studentId, 'attempt.studentId'),
-    status: parseStatus(payload.status),
-    createdAt: requireString(payload.createdAt, 'attempt.createdAt'),
+    assignmentId: optionalString(payload.assignmentId),
+    studentId: optionalString(payload.studentId),
+    status: payload.status === undefined ? undefined : parseStatus(payload.status),
+    createdAt: optionalString(payload.createdAt),
     submittedAt: optionalStringOrNull(payload.submittedAt),
-    totalScore: requireNumber(payload.totalScore, 'attempt.totalScore'),
+    totalScore: optionalNumber(payload.totalScore),
     questionAttempts: questionAttemptsRaw.map((item) => {
       if (!isRecord(item)) {
         throw new Error('Invalid question attempt item');
       }
 
       return {
-        questionId: requireString(item.questionId, 'questionAttempt.questionId'),
-        score: item.score === null ? null : requireNumber(item.score, 'questionAttempt.score'),
+        questionId: optionalString(item.questionId),
+        score:
+          item.score === undefined
+            ? undefined
+            : item.score === null
+              ? null
+              : requireNumber(item.score, 'questionAttempt.score'),
         feedback:
           item.feedback === null || item.feedback === undefined
             ? null
@@ -465,7 +491,7 @@ function normalizePagedItems<T>(
     listKey: string;
     parseItem: (value: unknown) => T;
   },
-): PagedItems<T> {
+): Paged<T> {
   if (!isRecord(payload)) {
     throw new Error(`Invalid ${options.errorLabel} response`);
   }
@@ -636,7 +662,7 @@ export async function listStudents(options: { signal?: AbortSignal } = {}): Prom
 
 export async function listCurriculum(
   options: { cursor?: string; limit?: number; signal?: AbortSignal } = {},
-): Promise<PagedItems<CurriculumListItem>> {
+): Promise<Paged<CurriculumListItem>> {
   const query = new URLSearchParams();
 
   if (options.cursor) {
@@ -688,7 +714,7 @@ export async function listAttempts(
     assignmentId?: string;
     signal?: AbortSignal;
   } = {},
-): Promise<PagedItems<AttemptListItem>> {
+): Promise<Paged<AttemptListItem>> {
   const query = new URLSearchParams();
 
   if (options.cursor) {
@@ -729,7 +755,7 @@ export async function getAttemptById(
 export async function listMasterySnapshots(
   studentId: string,
   options: { cursor?: string; limit?: number; signal?: AbortSignal } = {},
-): Promise<PagedItems<MasterySnapshotItem>> {
+): Promise<Paged<MasterySnapshotItem>> {
   const query = new URLSearchParams();
 
   if (options.cursor) {

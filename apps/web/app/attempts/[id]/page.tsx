@@ -6,11 +6,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { getAttemptById, getReadableErrorMessage, isAbortError } from '../../../lib/api';
 import { useRequireAuth } from '../../../lib/useAuth';
-import type { AttemptDetail } from '../../../types/api';
+import type { AttemptAnswerDetail, AttemptDetail } from '../../../types/api';
 
 type PageStatus = 'loading' | 'ready' | 'error';
 
-function formatDate(value: string | null): string {
+function formatDate(value: string | null | undefined): string {
   if (!value) {
     return '—';
   }
@@ -21,6 +21,10 @@ function formatDate(value: string | null): string {
   }
 
   return date.toLocaleString();
+}
+
+function questionAttemptKey(attemptId: string, questionAttempt: AttemptAnswerDetail, index: number): string {
+  return `${attemptId}:${questionAttempt.questionId ?? 'unknown'}:${index}`;
 }
 
 export default function AttemptDetailPage() {
@@ -87,6 +91,8 @@ export default function AttemptDetailPage() {
     );
   }
 
+  const questionAttempts = attempt?.questionAttempts ?? [];
+
   return (
     <main className="page">
       <section className="panel">
@@ -130,34 +136,38 @@ export default function AttemptDetailPage() {
                 <div className="statItem">
                   <dt>Assignment ID</dt>
                   <dd>
-                    <code>{attempt.assignmentId}</code>
+                    <code>{attempt.assignmentId ?? '—'}</code>
                   </dd>
                 </div>
                 <div className="statItem">
                   <dt>Student ID</dt>
                   <dd>
-                    <code>{attempt.studentId}</code>
+                    <code>{attempt.studentId ?? '—'}</code>
                   </dd>
                 </div>
                 <div className="statItem">
                   <dt>Status</dt>
-                  <dd>{attempt.status}</dd>
+                  <dd>{attempt.status ?? '—'}</dd>
                 </div>
                 <div className="statItem">
-                  <dt>Total score</dt>
-                  <dd>{attempt.totalScore}</dd>
+                  <dt>Started</dt>
+                  <dd>{formatDate(attempt.createdAt)}</dd>
                 </div>
                 <div className="statItem">
                   <dt>Submitted</dt>
                   <dd>{formatDate(attempt.submittedAt)}</dd>
+                </div>
+                <div className="statItem">
+                  <dt>Total score</dt>
+                  <dd>{attempt.totalScore ?? '—'}</dd>
                 </div>
               </dl>
             </section>
 
             <section className="card">
               <h2 className="cardTitle">Question attempts</h2>
-              {attempt.questionAttempts.length === 0 ? (
-                <p className="muted">No question attempts recorded yet.</p>
+              {questionAttempts.length === 0 ? (
+                <p className="muted">No question attempt payload available for this attempt.</p>
               ) : (
                 <table className="table">
                   <thead>
@@ -168,10 +178,10 @@ export default function AttemptDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {attempt.questionAttempts.map((questionAttempt) => (
-                      <tr key={`${attempt.attemptId}:${questionAttempt.questionId}`}>
+                    {questionAttempts.map((questionAttempt, index) => (
+                      <tr key={questionAttemptKey(attempt.attemptId, questionAttempt, index)}>
                         <td>
-                          <code>{questionAttempt.questionId}</code>
+                          <code>{questionAttempt.questionId ?? '—'}</code>
                         </td>
                         <td>{questionAttempt.score ?? '—'}</td>
                         <td>{questionAttempt.feedback ?? '—'}</td>

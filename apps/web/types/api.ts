@@ -82,20 +82,20 @@ export type AttemptListItem = {
 };
 
 export type AttemptAnswerDetail = {
-  questionId: string;
-  score: number | null;
-  feedback: string | null;
+  questionId?: string;
+  score?: number | null;
+  feedback?: string | null;
 };
 
 export type AttemptDetail = {
   attemptId: string;
-  assignmentId: string;
-  studentId: string;
-  status: AttemptStatus;
-  createdAt: string;
-  submittedAt: string | null;
-  totalScore: number;
-  questionAttempts: AttemptAnswerDetail[];
+  assignmentId?: string;
+  studentId?: string;
+  status?: AttemptStatus;
+  createdAt?: string;
+  submittedAt?: string | null;
+  totalScore?: number;
+  questionAttempts?: AttemptAnswerDetail[];
 };
 
 export type MasterySnapshotItem = {
