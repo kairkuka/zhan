@@ -72,3 +72,5 @@ brew services stop postgresql@16
 - `packages/shared` - Shared Zod schemas and TypeScript types.
 - `docs` - Architecture and MVP planning docs.
 - `docker-compose.yml` - Local Postgres container for development.
+
+- chore: trigger PR (no functional changes)

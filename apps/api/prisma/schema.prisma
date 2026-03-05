@@ -20,6 +20,11 @@ enum QuestionType {
   SHORT_TEXT
 }
 
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+}
+
 model Organization {
   id                 String              @id @default(cuid())
   name               String
@@ -42,6 +47,8 @@ model Organization {
   assignmentReleases AssignmentRelease[]
   questions          Question[]
   questionSkillTags  QuestionSkillTag[]
+  assignmentAttempts AssignmentAttempt[]
+  skillMasteries     SkillMastery[]
   attempts           Attempt[]
   attemptAnswers     AttemptAnswer[]
   masterySnapshots   MasterySnapshot[]
@@ -98,6 +105,8 @@ model Student {
   parentLinks        ParentStudentLink[]
   classEnrollments   ClassEnrollment[]
   assignmentReleases AssignmentRelease[]
+  assignmentAttempts AssignmentAttempt[]
+  skillMasteries     SkillMastery[]
   attempts           Attempt[]
   masterySnapshots   MasterySnapshot[]
 
@@ -205,15 +214,14 @@ model Topic {
 }
 
 model Skill {
-  id               String             @id @default(cuid())
-  name             String
-  topicId          String
-  organizationId   String
-  topic            Topic              @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  objectives       Objective[]
-  questionTags     QuestionSkillTag[]
-  masterySnapshots MasterySnapshot[]
+  id             String             @id @default(cuid())
+  name           String
+  topicId        String
+  organizationId String
+  topic          Topic              @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  objectives     Objective[]
+  questionTags   QuestionSkillTag[]
 
   @@index([organizationId])
   @@index([topicId])
@@ -233,12 +241,14 @@ model CurriculumTopic {
 }
 
 model CurriculumSkill {
-  id           String            @id @default(cuid())
+  id           String             @id @default(cuid())
   name         String
   topicId      String
-  topic        CurriculumTopic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  topic        CurriculumTopic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
   questionTags QuestionSkillTag[]
-  createdAt    DateTime          @default(now())
+  masteries    SkillMastery[]
+  snapshots    MasterySnapshot[]
+  createdAt    DateTime           @default(now())
 
   @@index([topicId])
 }
@@ -267,6 +277,7 @@ model Assignment {
   creator        User                @relation("AssignmentsCreatedByUser", fields: [createdBy], references: [id], onDelete: Restrict)
   releases       AssignmentRelease[]
   questions      Question[]
+  attempts       AssignmentAttempt[]
 
   @@index([organizationId])
   @@index([courseId])
@@ -294,16 +305,17 @@ model AssignmentRelease {
 }
 
 model Question {
-  id             String             @id @default(cuid())
-  assignmentId   String
-  type           QuestionType
-  prompt         String
-  correctAnswer  String             @db.Text
-  organizationId String
-  assignment     Assignment         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  skillTags      QuestionSkillTag[]
-  attemptAnswers AttemptAnswer[]
+  id               String             @id @default(cuid())
+  assignmentId     String
+  type             QuestionType
+  prompt           String
+  correctAnswer    String             @db.Text
+  organizationId   String
+  assignment       Assignment         @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  skillTags        QuestionSkillTag[]
+  questionAttempts QuestionAttempt[]
+  attemptAnswers   AttemptAnswer[]
 
   @@index([organizationId])
   @@index([assignmentId])
@@ -326,6 +338,58 @@ model QuestionSkillTag {
   @@index([questionId])
   @@index([skillId])
   @@index([curriculumSkillId])
+}
+
+model AssignmentAttempt {
+  id               String            @id @default(cuid())
+  assignmentId     String
+  studentId        String
+  organizationId   String
+  status           AttemptStatus     @default(IN_PROGRESS)
+  createdAt        DateTime          @default(now())
+  submittedAt      DateTime?
+  assignment       Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student          Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  questionAttempts QuestionAttempt[]
+
+  @@index([organizationId])
+  @@index([assignmentId])
+  @@index([studentId])
+  @@index([status])
+}
+
+model QuestionAttempt {
+  id         String            @id @default(cuid())
+  attemptId  String
+  questionId String
+  answer     Json
+  score      Int?
+  feedback   String?
+  attempt    AssignmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question   Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@index([questionId])
+}
+
+model SkillMastery {
+  id                String          @id @default(cuid())
+  studentId         String
+  curriculumSkillId String
+  organizationId    String
+  totalAttempts     Int             @default(0)
+  totalScore        Int             @default(0)
+  masteryLevel      Float           @default(0)
+  updatedAt         DateTime        @updatedAt
+  createdAt         DateTime        @default(now())
+  student           Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  skill             CurriculumSkill @relation(fields: [curriculumSkillId], references: [id], onDelete: Cascade)
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, curriculumSkillId])
+  @@index([organizationId])
 }
 
 model Attempt {
@@ -364,21 +428,23 @@ model AttemptAnswer {
 }
 
 model MasterySnapshot {
-  id             String       @id @default(cuid())
-  studentId      String
-  skillId        String
-  mastery        Int
-  confidence     Int
-  updatedAt      DateTime     @default(now()) @updatedAt
-  organizationId String
-  student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  skill          Skill        @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                String          @id @default(cuid())
+  studentId         String
+  curriculumSkillId String
+  organizationId    String
+  masteryLevel      Float
+  totalAttempts     Int
+  totalScore        Int
+  createdAt         DateTime        @default(now())
+  student           Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  skill             CurriculumSkill @relation(fields: [curriculumSkillId], references: [id], onDelete: Cascade)
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@unique([studentId, skillId])
+  @@index([studentId, curriculumSkillId])
+  @@index([studentId, organizationId, createdAt(sort: Desc)])
+  @@index([studentId, organizationId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([organizationId])
-  @@index([studentId])
-  @@index([skillId])
+  @@index([createdAt])
 }
 
 model EventLog {

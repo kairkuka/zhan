@@ -13,7 +13,12 @@
     "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev --schema prisma/schema.prisma",
     "prisma:seed": "dotenv -e ../../.env -- prisma db seed --schema prisma/schema.prisma",
     "prisma:studio": "dotenv -e ../../.env -- prisma studio --schema prisma/schema.prisma",
-    "acceptance:block5": "bash ./scripts/acceptance-block5.sh"
+    "acceptance:block5": "bash ./scripts/acceptance-block5.sh",
+    "acceptance:block6": "bash ./scripts/acceptance-block6.sh",
+    "acceptance:block7": "bash ./scripts/acceptance-block7.sh",
+    "acceptance:block8": "bash ./scripts/acceptance-block8.sh",
+    "acceptance:block9": "bash ./scripts/acceptance-block9.sh",
+    "acceptance:block10": "bash ./scripts/acceptance-block10.sh"
   },
   "prisma": {
     "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts"

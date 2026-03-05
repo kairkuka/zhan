@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
+import { AppShell } from '../components/AppShell';
+import { AuthProvider } from '../components/AuthProvider';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -15,7 +17,11 @@ type RootLayoutProps = {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
+      </body>
     </html>
   );
 }

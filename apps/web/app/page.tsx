@@ -56,23 +56,33 @@ export default function HomePage() {
   }, []);
 
   return (
-    <main className="container">
-      <h1>Skyvern Stage 1 - Block 2</h1>
-      <p>Web app is running.</p>
-      <p>
-        API target: <code>{apiBaseUrl}</code>
-      </p>
-      <p>
-        <Link href="/login">Go to login</Link> | <Link href="/admin/users">View admin users</Link>
-      </p>
-
-      {health.status === 'loading' && <p>{health.message}</p>}
-      {health.status === 'error' && <p className="error">{health.message}</p>}
-      {health.status === 'success' && (
-        <p className="success">
-          {health.message} Response: <code>{JSON.stringify(health.data)}</code>
+    <main className="page">
+      <section className="panel">
+        <h1>Skyvern Front Parity MVP</h1>
+        <p className="muted">
+          API target: <code>{apiBaseUrl}</code>
         </p>
-      )}
+
+        <div className="buttonRow">
+          <Link className="button" href="/dashboard">
+            Open dashboard
+          </Link>
+          <Link className="buttonSecondary" href="/login">
+            Login
+          </Link>
+          <Link className="buttonSecondary" href="/students">
+            Students
+          </Link>
+        </div>
+
+        {health.status === 'loading' && <p className="muted">{health.message}</p>}
+        {health.status === 'error' && <p className="errorText">{health.message}</p>}
+        {health.status === 'success' && (
+          <p className="success">
+            {health.message} Response: <code>{JSON.stringify(health.data)}</code>
+          </p>
+        )}
+      </section>
     </main>
   );
 }
