@@ -6,10 +6,11 @@ import {
   getReadableErrorMessage,
   getStudentMasteryOverview,
   getStudentMasteryTrend,
+  getStudentProjection,
   isAbortError,
   listStudents,
 } from './api';
-import type { MasteryOverview, TrendBucket } from '../types/api';
+import type { MasteryOverview, StudentProjection, TrendBucket } from '../types/api';
 
 type DashboardData = {
   totalStudents: number;
@@ -18,6 +19,7 @@ type DashboardData = {
   studentsAtRisk: number;
   trendStudentId: string;
   trendBuckets: TrendBucket[];
+  projection: StudentProjection | null;
 };
 
 type DashboardState =
@@ -108,7 +110,16 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
           },
         );
 
-        const [overviews, trend] = await Promise.all([overviewPromise, trendPromise]);
+        const projectionPromise = getStudentProjection(trendStudent.id, {
+          signal: controller.signal,
+        }).catch(() => null);
+
+        const [overviews, trend, projection] = await Promise.all([
+          overviewPromise,
+          trendPromise,
+          projectionPromise,
+        ]);
+
         if (controller.signal.aborted) {
           return;
         }
@@ -124,6 +135,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
             studentsAtRisk,
             trendStudentId: trendStudent.id,
             trendBuckets: trend.buckets,
+            projection,
           },
         });
       } catch (error) {

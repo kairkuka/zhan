@@ -31,6 +31,14 @@ function isActiveLink(pathname: string, href: string): boolean {
     return pathname === '/students' || pathname.startsWith('/students/');
   }
 
+  if (href === '/curriculum') {
+    return pathname === '/curriculum' || pathname.startsWith('/curriculum/');
+  }
+
+  if (href === '/attempts') {
+    return pathname === '/attempts' || pathname.startsWith('/attempts/');
+  }
+
   return pathname === href;
 }
 

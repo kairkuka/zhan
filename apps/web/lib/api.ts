@@ -1,11 +1,22 @@
 import type {
+  AttemptDetail,
+  AttemptListItem,
+  AttemptStatus,
+  CurriculumDetail,
+  CurriculumListItem,
+  CurriculumQuestionTag,
+  CurriculumSkillDetail,
+  CurriculumTopicDetail,
+  CurriculumUnitDetail,
   MasteryOverview,
   MasterySkill,
-  RiskLevel,
+  MasterySnapshotItem,
   MasteryTrendResponse,
+  RiskLevel,
   Student,
-  TrendDirection,
+  StudentProjection,
   TrendBucket,
+  TrendDirection,
 } from '../types/api';
 
 const API_URL = 'http://localhost:4000';
@@ -44,11 +55,17 @@ type OverviewCacheEntry = {
   expiresAt: number;
 };
 
+type PagedItems<T> = {
+  items: T[];
+  nextCursor: string | null;
+};
+
 const OVERVIEW_CACHE_TTL_MS = 60_000;
 const overviewCache = new Map<string, OverviewCacheEntry>();
 const overviewInFlight = new Map<string, Promise<MasteryOverview>>();
 const RISK_LEVELS = new Set<RiskLevel>(['LOW', 'MEDIUM', 'HIGH', 'UNKNOWN']);
 const TREND_DIRECTIONS = new Set<TrendDirection>(['UP', 'DOWN', 'FLAT', 'INSUFFICIENT_DATA']);
+const ATTEMPT_STATUS = new Set<AttemptStatus>(['IN_PROGRESS', 'SUBMITTED']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -101,6 +118,202 @@ function parseTrendDirection(value: unknown): TrendDirection | undefined {
   return TREND_DIRECTIONS.has(normalized as TrendDirection)
     ? (normalized as TrendDirection)
     : undefined;
+}
+
+function requireString(value: unknown, fieldName: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`Invalid ${fieldName}`);
+  }
+
+  return value;
+}
+
+function requireNumber(value: unknown, fieldName: string): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    throw new Error(`Invalid ${fieldName}`);
+  }
+
+  return value;
+}
+
+function optionalStringOrNull(value: unknown): string | null {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  throw new Error('Invalid optional string field');
+}
+
+function parseStatus(value: unknown): AttemptStatus {
+  if (typeof value !== 'string' || !ATTEMPT_STATUS.has(value as AttemptStatus)) {
+    throw new Error('Invalid attempt status');
+  }
+
+  return value as AttemptStatus;
+}
+
+function parseQuestionTag(payload: unknown): CurriculumQuestionTag {
+  if (!isRecord(payload)) {
+    throw new Error('Invalid curriculum question tag');
+  }
+
+  return {
+    id: requireString(payload.id, 'questionTag.id'),
+    questionId: requireString(payload.questionId, 'questionTag.questionId'),
+  };
+}
+
+function parseCurriculumSkill(payload: unknown): CurriculumSkillDetail {
+  if (!isRecord(payload)) {
+    throw new Error('Invalid curriculum skill');
+  }
+
+  const rawQuestionTags = payload.questionTags;
+  if (!Array.isArray(rawQuestionTags)) {
+    throw new Error('Invalid curriculum skill questionTags');
+  }
+
+  return {
+    id: requireString(payload.id, 'skill.id'),
+    name: requireString(payload.name, 'skill.name'),
+    questionTags: rawQuestionTags.map(parseQuestionTag),
+  };
+}
+
+function parseCurriculumTopic(payload: unknown): CurriculumTopicDetail {
+  if (!isRecord(payload)) {
+    throw new Error('Invalid curriculum topic');
+  }
+
+  const rawSkills = payload.skills;
+  if (!Array.isArray(rawSkills)) {
+    throw new Error('Invalid curriculum topic skills');
+  }
+
+  return {
+    id: requireString(payload.id, 'topic.id'),
+    name: requireString(payload.name, 'topic.name'),
+    order: requireNumber(payload.order, 'topic.order'),
+    skills: rawSkills.map(parseCurriculumSkill),
+  };
+}
+
+function parseCurriculumUnit(payload: unknown): CurriculumUnitDetail {
+  if (!isRecord(payload)) {
+    throw new Error('Invalid curriculum unit');
+  }
+
+  const rawTopics = payload.topics;
+  if (!Array.isArray(rawTopics)) {
+    throw new Error('Invalid curriculum unit topics');
+  }
+
+  return {
+    id: requireString(payload.id, 'unit.id'),
+    name: requireString(payload.name, 'unit.name'),
+    order: requireNumber(payload.order, 'unit.order'),
+    topics: rawTopics.map(parseCurriculumTopic),
+  };
+}
+
+function parseCurriculumListItem(payload: unknown): CurriculumListItem {
+  if (!isRecord(payload)) {
+    throw new Error('Invalid curriculum item');
+  }
+
+  return {
+    id: requireString(payload.id, 'curriculum.id'),
+    name: requireString(payload.name, 'curriculum.name'),
+    createdAt: requireString(payload.createdAt, 'curriculum.createdAt'),
+    unitsCount: requireNumber(payload.unitsCount, 'curriculum.unitsCount'),
+  };
+}
+
+function parseAttemptListItem(payload: unknown): AttemptListItem {
+  if (!isRecord(payload)) {
+    throw new Error('Invalid attempt list item');
+  }
+
+  return {
+    attemptId: requireString(payload.attemptId, 'attempt.attemptId'),
+    assignmentId: requireString(payload.assignmentId, 'attempt.assignmentId'),
+    studentId: requireString(payload.studentId, 'attempt.studentId'),
+    status: parseStatus(payload.status),
+    startedAt: requireString(payload.startedAt, 'attempt.startedAt'),
+    submittedAt: optionalStringOrNull(payload.submittedAt),
+    totalScore: requireNumber(payload.totalScore, 'attempt.totalScore'),
+  };
+}
+
+function parseAttemptDetail(payload: unknown): AttemptDetail {
+  if (!isRecord(payload)) {
+    throw new Error('Invalid attempt detail response');
+  }
+
+  const questionAttemptsRaw = payload.questionAttempts;
+  if (!Array.isArray(questionAttemptsRaw)) {
+    throw new Error('Invalid attempt detail questionAttempts');
+  }
+
+  return {
+    attemptId: requireString(payload.attemptId, 'attempt.attemptId'),
+    assignmentId: requireString(payload.assignmentId, 'attempt.assignmentId'),
+    studentId: requireString(payload.studentId, 'attempt.studentId'),
+    status: parseStatus(payload.status),
+    createdAt: requireString(payload.createdAt, 'attempt.createdAt'),
+    submittedAt: optionalStringOrNull(payload.submittedAt),
+    totalScore: requireNumber(payload.totalScore, 'attempt.totalScore'),
+    questionAttempts: questionAttemptsRaw.map((item) => {
+      if (!isRecord(item)) {
+        throw new Error('Invalid question attempt item');
+      }
+
+      return {
+        questionId: requireString(item.questionId, 'questionAttempt.questionId'),
+        score: item.score === null ? null : requireNumber(item.score, 'questionAttempt.score'),
+        feedback:
+          item.feedback === null || item.feedback === undefined
+            ? null
+            : requireString(item.feedback, 'questionAttempt.feedback'),
+      };
+    }),
+  };
+}
+
+function parseSnapshotItem(payload: unknown): MasterySnapshotItem {
+  if (!isRecord(payload)) {
+    throw new Error('Invalid mastery snapshot item');
+  }
+
+  const riskLevel = parseRiskLevel(payload.riskLevel) ?? 'UNKNOWN';
+
+  return {
+    id: requireString(payload.id, 'snapshot.id'),
+    createdAt: requireString(payload.createdAt, 'snapshot.createdAt'),
+    averageMastery: requireNumber(payload.averageMastery, 'snapshot.averageMastery'),
+    skillsTracked: requireNumber(payload.skillsTracked, 'snapshot.skillsTracked'),
+    riskLevel,
+  };
+}
+
+function parseStudentProjection(payload: unknown): StudentProjection {
+  if (!isRecord(payload)) {
+    throw new Error('Invalid student projection response');
+  }
+
+  return {
+    studentId: requireString(payload.studentId, 'projection.studentId'),
+    skillsTracked: requireNumber(payload.skillsTracked, 'projection.skillsTracked'),
+    averageMastery: requireNumber(payload.averageMastery, 'projection.averageMastery'),
+    riskLevel: parseRiskLevel(payload.riskLevel) ?? 'UNKNOWN',
+    highRiskSkills: requireNumber(payload.highRiskSkills, 'projection.highRiskSkills'),
+    mediumRiskSkills: requireNumber(payload.mediumRiskSkills, 'projection.mediumRiskSkills'),
+    lowRiskSkills: requireNumber(payload.lowRiskSkills, 'projection.lowRiskSkills'),
+  };
 }
 
 function normalizeBuckets(raw: unknown): TrendBucket[] {
@@ -245,6 +458,45 @@ function normalizeTrendResponse(payload: unknown): MasteryTrendResponse {
   };
 }
 
+function normalizePagedItems<T>(
+  payload: unknown,
+  options: {
+    errorLabel: string;
+    listKey: string;
+    parseItem: (value: unknown) => T;
+  },
+): PagedItems<T> {
+  if (!isRecord(payload)) {
+    throw new Error(`Invalid ${options.errorLabel} response`);
+  }
+
+  let rawItems: unknown;
+  let rawNextCursor: unknown = null;
+
+  if (Array.isArray(payload.items)) {
+    rawItems = payload.items;
+    rawNextCursor = payload.nextCursor;
+  } else if (Array.isArray(payload[options.listKey])) {
+    rawItems = payload[options.listKey];
+    if (isRecord(payload.page)) {
+      rawNextCursor = payload.page.nextCursor;
+    } else {
+      rawNextCursor = payload.nextCursor;
+    }
+  } else {
+    throw new Error(`Invalid ${options.errorLabel} response: expected item array`);
+  }
+
+  if (!Array.isArray(rawItems)) {
+    throw new Error(`Invalid ${options.errorLabel} response: expected item array`);
+  }
+
+  const items = rawItems.map(options.parseItem);
+  const nextCursor = typeof rawNextCursor === 'string' ? rawNextCursor : null;
+
+  return { items, nextCursor };
+}
+
 function ensureToken(): string {
   const token = getToken();
   if (!token) {
@@ -380,6 +632,138 @@ export async function login(email: string, password: string): Promise<string> {
 export async function listStudents(options: { signal?: AbortSignal } = {}): Promise<Student[]> {
   const payload = await apiFetch<unknown>('/students', { signal: options.signal });
   return normalizeStudents(payload);
+}
+
+export async function listCurriculum(
+  options: { cursor?: string; limit?: number; signal?: AbortSignal } = {},
+): Promise<PagedItems<CurriculumListItem>> {
+  const query = new URLSearchParams();
+
+  if (options.cursor) {
+    query.set('cursor', options.cursor);
+  }
+
+  if (typeof options.limit === 'number') {
+    query.set('limit', String(options.limit));
+  }
+
+  const suffix = query.toString();
+  const path = suffix.length > 0 ? `/curriculum?${suffix}` : '/curriculum';
+  const payload = await apiFetch<unknown>(path, { signal: options.signal });
+
+  return normalizePagedItems(payload, {
+    errorLabel: 'curriculum list',
+    listKey: 'items',
+    parseItem: parseCurriculumListItem,
+  });
+}
+
+export async function getCurriculumById(
+  id: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<CurriculumDetail> {
+  const payload = await apiFetch<unknown>(`/curriculum/${id}`, { signal: options.signal });
+  if (!isRecord(payload)) {
+    throw new Error('Invalid curriculum detail response');
+  }
+
+  const unitsRaw = payload.units;
+  if (!Array.isArray(unitsRaw)) {
+    throw new Error('Invalid curriculum detail response: units');
+  }
+
+  return {
+    id: requireString(payload.id, 'curriculum.id'),
+    name: requireString(payload.name, 'curriculum.name'),
+    createdAt: requireString(payload.createdAt, 'curriculum.createdAt'),
+    units: unitsRaw.map(parseCurriculumUnit),
+  };
+}
+
+export async function listAttempts(
+  options: {
+    cursor?: string;
+    limit?: number;
+    studentId?: string;
+    assignmentId?: string;
+    signal?: AbortSignal;
+  } = {},
+): Promise<PagedItems<AttemptListItem>> {
+  const query = new URLSearchParams();
+
+  if (options.cursor) {
+    query.set('cursor', options.cursor);
+  }
+
+  if (typeof options.limit === 'number') {
+    query.set('limit', String(options.limit));
+  }
+
+  if (options.studentId) {
+    query.set('studentId', options.studentId);
+  }
+
+  if (options.assignmentId) {
+    query.set('assignmentId', options.assignmentId);
+  }
+
+  const suffix = query.toString();
+  const path = suffix.length > 0 ? `/attempts?${suffix}` : '/attempts';
+  const payload = await apiFetch<unknown>(path, { signal: options.signal });
+
+  return normalizePagedItems(payload, {
+    errorLabel: 'attempts list',
+    listKey: 'attempts',
+    parseItem: parseAttemptListItem,
+  });
+}
+
+export async function getAttemptById(
+  id: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<AttemptDetail> {
+  const payload = await apiFetch<unknown>(`/attempts/${id}`, { signal: options.signal });
+  return parseAttemptDetail(payload);
+}
+
+export async function listMasterySnapshots(
+  studentId: string,
+  options: { cursor?: string; limit?: number; signal?: AbortSignal } = {},
+): Promise<PagedItems<MasterySnapshotItem>> {
+  const query = new URLSearchParams();
+
+  if (options.cursor) {
+    query.set('cursor', options.cursor);
+  }
+
+  if (typeof options.limit === 'number') {
+    query.set('limit', String(options.limit));
+  }
+
+  const suffix = query.toString();
+  const path =
+    suffix.length > 0
+      ? `/students/${studentId}/mastery-snapshots?${suffix}`
+      : `/students/${studentId}/mastery-snapshots`;
+
+  const payload = await apiFetch<unknown>(path, { signal: options.signal });
+
+  return normalizePagedItems(payload, {
+    errorLabel: 'mastery snapshots list',
+    listKey: 'snapshots',
+    parseItem: parseSnapshotItem,
+  });
+}
+
+export async function getStudentProjection(
+  studentId: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<StudentProjection> {
+  const payload = await apiFetch<unknown>(`/students/${studentId}/projection`, {
+    signal: options.signal,
+  });
+
+  return parseStudentProjection(payload);
 }
 
 export async function getStudentMasteryOverview(

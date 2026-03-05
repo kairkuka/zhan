@@ -109,6 +109,22 @@ export default function DashboardPage() {
                 />
               ))}
             </div>
+
+            {state.data.projection && (
+              <section className="card">
+                <h2 className="cardTitle">Risk breakdown</h2>
+                <p className="muted">
+                  Projection from student <code>{state.data.projection.studentId}</code>
+                </p>
+                <ul className="listMuted">
+                  <li>High risk skills: {state.data.projection.highRiskSkills}</li>
+                  <li>Medium risk skills: {state.data.projection.mediumRiskSkills}</li>
+                  <li>Low risk skills: {state.data.projection.lowRiskSkills}</li>
+                  <li>Projection risk level: {state.data.projection.riskLevel}</li>
+                </ul>
+              </section>
+            )}
+
             <TrendChart buckets={state.data.trendBuckets} title="Weekly mastery trend" />
           </div>
         )}
